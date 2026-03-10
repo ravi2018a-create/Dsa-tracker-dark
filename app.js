@@ -755,7 +755,52 @@ function checkDeadlinesAndNotify() {
 
 // Request permission on page load and set up periodic checks
 document.addEventListener('DOMContentLoaded', () => {
-    requestNotificationPermission();
+    updateNotifyButton();
+});
+
+// Notification button click handler
+function updateNotifyButton() {
+    const btn = $('#notify-btn');
+    if (!btn) return;
+    
+    if (!('Notification' in window)) {
+        btn.textContent = '🔕 Not Supported';
+        btn.disabled = true;
+        btn.classList.add('disabled');
+        return;
+    }
+    
+    if (Notification.permission === 'granted') {
+        btn.textContent = '🔔 Alerts On';
+        btn.classList.add('active');
+        btn.disabled = true;
+    } else if (Notification.permission === 'denied') {
+        btn.textContent = '🔕 Blocked';
+        btn.classList.add('denied');
+        btn.title = 'Notifications blocked. Enable in browser settings.';
+    } else {
+        btn.textContent = '🔔 Enable Alerts';
+        btn.classList.remove('active', 'denied');
+    }
+}
+
+$('#notify-btn')?.addEventListener('click', async () => {
+    const btn = $('#notify-btn');
+    if (Notification.permission === 'denied') {
+        toast('Notifications blocked. Please enable in browser settings (click 🔒 in address bar)', 'error');
+        return;
+    }
+    
+    const granted = await requestNotificationPermission();
+    updateNotifyButton();
+    
+    if (granted) {
+        toast('🔔 Notifications enabled! You\'ll get reminders for deadlines.', 'success');
+        // Send a test notification
+        sendNotification('✅ Notifications Enabled!', 'You will now receive deadline reminders.', 'test');
+    } else {
+        toast('Notification permission denied', 'error');
+    }
 });
 
 // Check deadlines when tasks are loaded or rendered

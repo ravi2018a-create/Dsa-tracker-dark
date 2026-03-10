@@ -119,6 +119,32 @@ body {
 }
 .btn-sm { padding: 8px 14px; font-size: .82rem; }
 
+/* Notification Button */
+.btn-notify {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning);
+}
+.btn-notify:hover {
+    background: var(--warning);
+    color: #000;
+}
+.btn-notify.active {
+    background: var(--success-bg);
+    color: var(--success);
+    border-color: var(--success);
+    cursor: default;
+}
+.btn-notify.denied {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-color: var(--danger);
+}
+.btn-notify.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* ─── HEADER ─── */
 .header {
     display: flex; justify-content: space-between; align-items: center;
