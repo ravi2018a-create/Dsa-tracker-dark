@@ -92,6 +92,8 @@ async function loadAll() {
     if (error) { toast('Load failed: ' + error.message, 'error'); return; }
     tasks = data || [];
     render();
+    // Check for deadline notifications after loading
+    setTimeout(() => checkDeadlinesAndNotify(), 2000);
 }
 
 // ============================================
@@ -660,6 +662,117 @@ function toast(msg, type='info') {
     setTimeout(() => el.remove(), 3200);
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') editOverlay.classList.add('hidden'); });
+
+// ============================================
+//  BROWSER NOTIFICATIONS
+// ============================================
+let notificationPermission = Notification.permission;
+let lastNotificationCheck = 0;
+const NOTIFICATION_INTERVAL = 60 * 60 * 1000; // Check every hour
+
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.log('Browser does not support notifications');
+        return false;
+    }
+    if (Notification.permission === 'granted') {
+        notificationPermission = 'granted';
+        return true;
+    }
+    if (Notification.permission !== 'denied') {
+        const permission = await Notification.requestPermission();
+        notificationPermission = permission;
+        return permission === 'granted';
+    }
+    return false;
+}
+
+function sendNotification(title, body, tag = 'dsa-reminder') {
+    if (notificationPermission !== 'granted') return;
+    
+    const notification = new Notification(title, {
+        body,
+        icon: '📚',
+        tag,
+        requireInteraction: false,
+        silent: false
+    });
+    
+    notification.onclick = () => {
+        window.focus();
+        notification.close();
+    };
+    
+    setTimeout(() => notification.close(), 10000);
+}
+
+function checkDeadlinesAndNotify() {
+    const now = Date.now();
+    if (now - lastNotificationCheck < NOTIFICATION_INTERVAL) return;
+    lastNotificationCheck = now;
+    
+    if (notificationPermission !== 'granted' || !tasks.length) return;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    let overdueCount = 0;
+    let dueTodayCount = 0;
+    let dueTomorrowCount = 0;
+    
+    for (const t of tasks) {
+        if (t.status === 'Done' || !t.due_date) continue;
+        const due = new Date(t.due_date);
+        due.setHours(0, 0, 0, 0);
+        
+        if (due < today) overdueCount++;
+        else if (due.getTime() === today.getTime()) dueTodayCount++;
+        else if (due.getTime() === tomorrow.getTime()) dueTomorrowCount++;
+    }
+    
+    if (overdueCount > 0) {
+        sendNotification(
+            `⚠️ ${overdueCount} Overdue Question${overdueCount > 1 ? 's' : ''}!`,
+            `You have ${overdueCount} DSA question${overdueCount > 1 ? 's' : ''} past the deadline. Open the tracker to solve them!`,
+            'overdue'
+        );
+    } else if (dueTodayCount > 0) {
+        sendNotification(
+            `📅 ${dueTodayCount} Due Today!`,
+            `You have ${dueTodayCount} DSA question${dueTodayCount > 1 ? 's' : ''} due today. Don't miss your deadline!`,
+            'due-today'
+        );
+    } else if (dueTomorrowCount > 0) {
+        sendNotification(
+            `🔔 ${dueTomorrowCount} Due Tomorrow`,
+            `You have ${dueTomorrowCount} DSA question${dueTomorrowCount > 1 ? 's' : ''} due tomorrow. Plan ahead!`,
+            'due-tomorrow'
+        );
+    }
+}
+
+// Request permission on page load and set up periodic checks
+document.addEventListener('DOMContentLoaded', () => {
+    requestNotificationPermission();
+});
+
+// Check deadlines when tasks are loaded or rendered
+const originalRender = typeof render === 'function' ? render : null;
+function setupNotificationCheck() {
+    setInterval(() => {
+        if (user && tasks.length) checkDeadlinesAndNotify();
+    }, NOTIFICATION_INTERVAL);
+    
+    // Also check when visibility changes (user returns to tab)
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && user && tasks.length) {
+            checkDeadlinesAndNotify();
+        }
+    });
+}
+setupNotificationCheck();
 
 // ============================================
 //  EMAIL REMINDER SETUP (Supabase Edge Function)
