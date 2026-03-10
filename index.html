@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Tracker Mission Qualcomm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Auth Container -->
+    <div class="auth-container" id="auth-container">
+        <div class="auth-card">
+            <div class="auth-logo">📚 DSA Tracker </div>
+            <div class="auth-sub">Track your DSA preparation with deadlines</div>
+
+            <form class="auth-form active" id="login-form">
+                <h2>Log In</h2>
+                <input type="email" id="login-email" placeholder="Email" required>
+                <input type="password" id="login-password" placeholder="Password" required>
+                <button type="submit" class="btn btn-primary">Log In</button>
+                <p class="switch-text">No account? <a href="#" id="switch-signup">Sign Up</a></p>
+            </form>
+
+            <form class="auth-form" id="signup-form">
+                <h2>Sign Up</h2>
+                <input type="email" id="signup-email" placeholder="Email" required>
+                <input type="password" id="signup-password" placeholder="Password" required>
+                <input type="password" id="signup-confirm" placeholder="Confirm Password" required>
+                <button type="submit" class="btn btn-primary">Create Account</button>
+                <p class="switch-text">Have an account? <a href="#" id="switch-login">Log In</a></p>
+            </form>
+
+            <div class="auth-msg" id="auth-msg"></div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="app-container hidden" id="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1>📚 DSA Tracker Mission Qualcomm</h1>
+            </div>
+            <div class="header-right">
+                <span id="user-email"></span>
+                <button id="logout-btn" class="btn btn-sm">Logout</button>
+            </div>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat">Total: <strong id="stat-total">0</strong></div>
+            <div class="stat">Solved: <strong id="stat-solved">0</strong></div>
+            <div class="stat">Unsolved: <strong id="stat-unsolved">0</strong></div>
+            <div class="stat stat-overdue">Overdue: <strong id="stat-overdue">0</strong></div>
+            <div class="stat progress-stat">
+                <span>Progress: <strong id="stat-percent">0%</strong></span>
+                <div class="progress-track"><div class="progress-fill" id="progress-bar"></div></div>
+            </div>
+            <button id="delete-all-btn" class="btn-delete-all hidden">🗑️ Delete All</button>
+        </div>
+
+        <!-- Topic Stats -->
+        <div class="topic-stats" id="topic-stats"></div>
+
+        <!-- Add Section -->
+        <div class="add-section">
+            <div class="add-mode-tabs">
+                <button class="mode-tab active" id="mode-smart">🧠 Smart Paste</button>
+                <button class="mode-tab" id="mode-manual">✍️ Manual</button>
+            </div>
+
+            <textarea id="add-input" rows="6" placeholder="Paste your entire question list with topic headers — it auto-detects!
+
+Example:
+1️⃣ Binary Search (20 Questions)
+Search Insert Position
+Find Peak Element
+
+2️⃣ Arrays (30 Questions)
+Two Sum
+Best Time to Buy and Sell Stock"></textarea>
+
+            <div id="parse-preview" class="parse-preview hidden"></div>
+
+            <div id="manual-controls" class="manual-controls hidden">
+                <select id="add-topic">
+                    <option value="Arrays">Arrays</option>
+                    <option value="Strings">Strings</option>
+                    <option value="Linked List">Linked List</option>
+                    <option value="Stack">Stack</option>
+                    <option value="Queue">Queue</option>
+                    <option value="Hashing">Hashing</option>
+                    <option value="Tree">Tree</option>
+                    <option value="BST">BST</option>
+                    <option value="Heap">Heap</option>
+                    <option value="Graph">Graph</option>
+                    <option value="Recursion">Recursion</option>
+                    <option value="Backtracking">Backtracking</option>
+                    <option value="Dynamic Programming">Dynamic Programming</option>
+                    <option value="Greedy">Greedy</option>
+                    <option value="Binary Search">Binary Search</option>
+                    <option value="Sliding Window">Sliding Window</option>
+                    <option value="Two Pointers">Two Pointers</option>
+                    <option value="Bit Manipulation">Bit Manipulation</option>
+                    <option value="Math">Math</option>
+                    <option value="Trie">Trie</option>
+                    <option value="Segment Tree">Segment Tree</option>
+                </select>
+            </div>
+
+            <button id="add-btn" class="btn btn-primary btn-add">Add Questions</button>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <input type="text" id="search" placeholder="🔍 Search questions...">
+            <select id="filter-topic">
+                <option value="all">All Topics</option>
+                <option value="Arrays">Arrays</option>
+                <option value="Strings">Strings</option>
+                <option value="Linked List">Linked List</option>
+                <option value="Stack">Stack</option>
+                <option value="Queue">Queue</option>
+                <option value="Hashing">Hashing</option>
+                <option value="Tree">Tree</option>
+                <option value="BST">BST</option>
+                <option value="Heap">Heap</option>
+                <option value="Graph">Graph</option>
+                <option value="Recursion">Recursion</option>
+                <option value="Backtracking">Backtracking</option>
+                <option value="Dynamic Programming">Dynamic Programming</option>
+                <option value="Greedy">Greedy</option>
+                <option value="Binary Search">Binary Search</option>
+                <option value="Sliding Window">Sliding Window</option>
+                <option value="Two Pointers">Two Pointers</option>
+                <option value="Bit Manipulation">Bit Manipulation</option>
+                <option value="Math">Math</option>
+                <option value="Trie">Trie</option>
+                <option value="Segment Tree">Segment Tree</option>
+            </select>
+            <select id="filter-status">
+                <option value="all">All Status</option>
+                <option value="Pending">Unsolved</option>
+                <option value="Completed">Solved</option>
+                <option value="Overdue">Overdue</option>
+            </select>
+            <select id="sort-by">
+                <option value="created_at-asc">Paste Order</option>
+                <option value="created_at-desc">Newest First</option>
+                <option value="due_date-asc">Deadline (Soonest)</option>
+            </select>
+        </div>
+
+        <!-- Question List -->
+        <ul class="question-list" id="question-list"></ul>
+        <div class="empty-state hidden" id="empty-state">No questions yet. Add some above!</div>
+        <div class="loading hidden" id="loading">Loading...</div>
+
+        <!-- Edit Modal -->
+        <div class="edit-overlay hidden" id="edit-overlay">
+            <div class="edit-modal">
+                <h3>Edit Question</h3>
+                <input type="hidden" id="edit-id">
+                <label>Title</label>
+                <input type="text" id="edit-title">
+                <label>Notes</label>
+                <textarea id="edit-notes" rows="3"></textarea>
+                <label>Topic</label>
+                <select id="edit-topic">
+                    <option value="Arrays">Arrays</option>
+                    <option value="Strings">Strings</option>
+                    <option value="Linked List">Linked List</option>
+                    <option value="Stack">Stack</option>
+                    <option value="Queue">Queue</option>
+                    <option value="Hashing">Hashing</option>
+                    <option value="Tree">Tree</option>
+                    <option value="BST">BST</option>
+                    <option value="Heap">Heap</option>
+                    <option value="Graph">Graph</option>
+                    <option value="Recursion">Recursion</option>
+                    <option value="Backtracking">Backtracking</option>
+                    <option value="Dynamic Programming">Dynamic Programming</option>
+                    <option value="Greedy">Greedy</option>
+                    <option value="Binary Search">Binary Search</option>
+                    <option value="Sliding Window">Sliding Window</option>
+                    <option value="Two Pointers">Two Pointers</option>
+                    <option value="Bit Manipulation">Bit Manipulation</option>
+                    <option value="Math">Math</option>
+                    <option value="Trie">Trie</option>
+                    <option value="Segment Tree">Segment Tree</option>
+                </select>
+                <label>Deadline</label>
+                <input type="date" id="edit-deadline">
+                <div class="edit-actions">
+                    <button id="edit-cancel" class="btn btn-sm">Cancel</button>
+                    <button id="edit-save" class="btn btn-primary btn-sm">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="toast-box"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
