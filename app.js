@@ -33,6 +33,33 @@ let user = null;
 let tasks = [];
 
 // ============================================
+//  FILTER PERSISTENCE
+// ============================================
+const FILTER_STORAGE_KEY = 'dsa-tracker-filters';
+
+function saveFilters() {
+    const filters = {
+        search: searchEl.value,
+        topic: fTopic.value,
+        status: fStatus.value,
+        sort: sortEl.value
+    };
+    localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+}
+
+function restoreFilters() {
+    const saved = localStorage.getItem(FILTER_STORAGE_KEY);
+    if (!saved) return;
+    try {
+        const filters = JSON.parse(saved);
+        if (filters.search) searchEl.value = filters.search;
+        if (filters.topic) fTopic.value = filters.topic;
+        if (filters.status) fStatus.value = filters.status;
+        if (filters.sort) sortEl.value = filters.sort;
+    } catch (e) { /* ignore parse errors */ }
+}
+
+// ============================================
 //  AUTH STATE LISTENER
 // ============================================
 db.auth.onAuthStateChange((event, session) => {
@@ -41,6 +68,7 @@ db.auth.onAuthStateChange((event, session) => {
         authContainer.classList.add('hidden');
         appContainer.classList.remove('hidden');
         $('#user-email').textContent = user.email;
+        restoreFilters();
         loadAll();
     } else {
         authContainer.classList.remove('hidden');
@@ -474,10 +502,10 @@ $('#edit-save').onclick = async () => {
 // ============================================
 //  FILTER / SORT / RENDER
 // ============================================
-searchEl.addEventListener('input', render);
-fTopic.addEventListener('change', render);
-fStatus.addEventListener('change', render);
-sortEl.addEventListener('change', render);
+searchEl.addEventListener('input', () => { saveFilters(); render(); });
+fTopic.addEventListener('change', () => { saveFilters(); render(); });
+fStatus.addEventListener('change', () => { saveFilters(); render(); });
+sortEl.addEventListener('change', () => { saveFilters(); render(); });
 
 function render() {
     let list = [...tasks];
