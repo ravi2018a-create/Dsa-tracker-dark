@@ -501,6 +501,31 @@ $('#code-submit').onclick = async () => {
 };
 
 // ============================================
+//  VIEW SUBMITTED CODE
+// ============================================
+const viewCodeOverlay = $('#view-code-overlay');
+const viewCodeTitle = $('#view-code-title');
+const viewCodeContent = $('#view-code-content');
+
+function viewCode(task) {
+    viewCodeTitle.textContent = task.task_title;
+    viewCodeContent.textContent = task.solution_code || 'No code submitted';
+    viewCodeOverlay.classList.remove('hidden');
+}
+
+$('#view-code-close').onclick = () => viewCodeOverlay.classList.add('hidden');
+viewCodeOverlay.onclick = e => { if (e.target === viewCodeOverlay) viewCodeOverlay.classList.add('hidden'); };
+
+$('#view-code-copy').onclick = () => {
+    const code = viewCodeContent.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        toast('Code copied to clipboard!', 'success');
+    }).catch(() => {
+        toast('Failed to copy', 'error');
+    });
+};
+
+// ============================================
 //  DELETE
 // ============================================
 async function remove(id) {
@@ -625,6 +650,7 @@ function render() {
                 ${t.task_description ? `<div class="q-notes">${esc(t.task_description)}</div>` : ''}
             </div>
             <div class="q-actions">
+                ${solved && t.solution_code ? '<button class="view-code-btn" title="View Code">💻</button>' : ''}
                 <button class="edit-btn" title="Edit">✏️</button>
                 <button class="del" title="Delete">🗑️</button>
             </div>
@@ -633,6 +659,9 @@ function render() {
         li.querySelector('.q-check').onchange = () => toggle(t.task_id);
         li.querySelector('.edit-btn').onclick = () => openEdit(t);
         li.querySelector('.del').onclick = () => { if (confirm('Delete this question?')) remove(t.task_id); };
+        if (solved && t.solution_code) {
+            li.querySelector('.view-code-btn').onclick = () => viewCode(t);
+        }
 
         listEl.appendChild(li);
     });
