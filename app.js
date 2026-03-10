@@ -431,23 +431,74 @@ addBtn.onclick = async () => {
 // ============================================
 //  TOGGLE STATUS
 // ============================================
+const codeOverlay = $('#code-overlay');
+const codeTaskId = $('#code-task-id');
+const codeInput = $('#code-input');
+
 async function toggle(id) {
     const t = tasks.find(x => x.task_id === id);
     if (!t) return;
-    const ns = t.status === 'Completed' ? 'Pending' : 'Completed';
-    const { data, error } = await db.from('tasks').update({ status: ns, updated_at: new Date().toISOString() }).eq('task_id', id).eq('user_id', user.id).select().single();
+    
+    // If marking as Completed, require code submission
+    if (t.status !== 'Completed') {
+        codeTaskId.value = id;
+        codeInput.value = t.solution_code || '';
+        codeOverlay.classList.remove('hidden');
+        codeInput.focus();
+        return;
+    }
+    
+    // If unchecking (going back to Pending), allow directly
+    const { data, error } = await db.from('tasks').update({ status: 'Pending', updated_at: new Date().toISOString() }).eq('task_id', id).eq('user_id', user.id).select().single();
     if (error) { toast('Update failed', 'error'); return; }
     const i = tasks.findIndex(x => x.task_id === id);
     if (i !== -1) tasks[i] = data;
     render();
-
-    // Show Late/On Time feedback
-    if (ns === 'Completed') {
-        const status = getDeadlineStatus(data);
-        if (status === 'late') toast('⚠️ Completed Late!', 'info');
-        else toast('✅ Solved On Time!', 'success');
-    }
 }
+
+// Code submission modal handlers
+$('#code-cancel').onclick = () => {
+    codeOverlay.classList.add('hidden');
+    codeInput.value = '';
+    render(); // Reset checkbox state
+};
+
+codeOverlay.onclick = e => { 
+    if (e.target === codeOverlay) {
+        codeOverlay.classList.add('hidden');
+        codeInput.value = '';
+        render();
+    }
+};
+
+$('#code-submit').onclick = async () => {
+    const code = codeInput.value.trim();
+    if (!code) {
+        toast('Please paste your code before marking as solved!', 'error');
+        return;
+    }
+    
+    const id = parseInt(codeTaskId.value);
+    const { data, error } = await db.from('tasks').update({ 
+        status: 'Completed', 
+        solution_code: code,
+        updated_at: new Date().toISOString() 
+    }).eq('task_id', id).eq('user_id', user.id).select().single();
+    
+    if (error) { toast('Update failed', 'error'); return; }
+    
+    const i = tasks.findIndex(x => x.task_id === id);
+    if (i !== -1) tasks[i] = data;
+    
+    codeOverlay.classList.add('hidden');
+    codeInput.value = '';
+    render();
+    
+    // Show Late/On Time feedback
+    const status = getDeadlineStatus(data);
+    if (status === 'late') toast('⚠️ Completed Late!', 'info');
+    else toast('✅ Solved On Time!', 'success');
+};
 
 // ============================================
 //  DELETE

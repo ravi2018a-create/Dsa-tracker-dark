@@ -17,9 +17,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     due_date     DATE,
     status       TEXT NOT NULL DEFAULT 'Pending'
                      CHECK (status IN ('Completed', 'Pending')),
+    solution_code TEXT DEFAULT '',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- If table already exists, add the solution_code column:
+-- ALTER TABLE tasks ADD COLUMN IF NOT EXISTS solution_code TEXT DEFAULT '';
 
 -- 2. Indexes for fast queries
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);

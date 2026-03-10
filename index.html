@@ -160,6 +160,21 @@ Best Time to Buy and Sell Stock"></textarea>
         <div class="empty-state hidden" id="empty-state">No questions yet. Add some above!</div>
         <div class="loading hidden" id="loading">Loading...</div>
 
+        <!-- Code Submission Modal -->
+        <div class="edit-overlay hidden" id="code-overlay">
+            <div class="edit-modal code-modal">
+                <h3>📝 Submit Your Solution</h3>
+                <p class="code-modal-hint">Paste your code below to mark this question as solved</p>
+                <input type="hidden" id="code-task-id">
+                <label>Your Code <span class="required">*</span></label>
+                <textarea id="code-input" rows="12" placeholder="// Paste your solution code here..."></textarea>
+                <div class="edit-actions">
+                    <button id="code-cancel" class="btn btn-sm">Cancel</button>
+                    <button id="code-submit" class="btn btn-primary btn-sm">✅ Mark as Solved</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Edit Modal -->
         <div class="edit-overlay hidden" id="edit-overlay">
             <div class="edit-modal">
