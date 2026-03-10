@@ -265,7 +265,11 @@ body {
 .topic-stat-nums {
     font-size: .75rem; font-weight: 700; color: var(--text2); min-width: 45px; text-align: right;
 }
+.topic-stat-pct {
+    font-size: .7rem; font-weight: 600; color: var(--primary); min-width: 40px;
+}
 .topic-stat-item.complete .topic-stat-nums { color: var(--success); }
+.topic-stat-item.complete .topic-stat-pct { color: var(--success); }
 
 /* ─── ADD SECTION ─── */
 .add-section {

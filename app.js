@@ -617,6 +617,7 @@ function updateTopicStats() {
                         <div class="topic-stat-fill" style="width: ${pct}%"></div>
                     </div>
                     <span class="topic-stat-nums">${data.solved}/${data.total}</span>
+                    <span class="topic-stat-pct">(${pct}%)</span>
                 </div>
             </div>
         `;
