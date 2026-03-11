@@ -827,36 +827,53 @@ function checkDeadlinesAndNotify() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    let overdueCount = 0;
-    let dueTodayCount = 0;
-    let dueTomorrowCount = 0;
+    // Only consider UNSOLVED (Pending) questions with deadlines
+    const pendingWithDeadline = tasks.filter(t => t.status === 'Pending' && t.due_date);
     
-    for (const t of tasks) {
-        if (t.status === 'Done' || !t.due_date) continue;
+    let overdueQuestions = [];
+    let dueTodayQuestions = [];
+    let dueTomorrowQuestions = [];
+    
+    for (const t of pendingWithDeadline) {
         const due = new Date(t.due_date);
         due.setHours(0, 0, 0, 0);
         
-        if (due < today) overdueCount++;
-        else if (due.getTime() === today.getTime()) dueTodayCount++;
-        else if (due.getTime() === tomorrow.getTime()) dueTomorrowCount++;
+        if (due < today) overdueQuestions.push(t);
+        else if (due.getTime() === today.getTime()) dueTodayQuestions.push(t);
+        else if (due.getTime() === tomorrow.getTime()) dueTomorrowQuestions.push(t);
     }
     
-    if (overdueCount > 0) {
+    // Sort by deadline (nearest first)
+    const sortByDate = (a, b) => new Date(a.due_date) - new Date(b.due_date);
+    overdueQuestions.sort(sortByDate);
+    dueTodayQuestions.sort(sortByDate);
+    dueTomorrowQuestions.sort(sortByDate);
+    
+    if (overdueQuestions.length > 0) {
+        const nearest = overdueQuestions[0];
+        const questionNames = overdueQuestions.slice(0, 3).map(q => `• ${q.task_title}`).join('\n');
+        const moreText = overdueQuestions.length > 3 ? `\n...and ${overdueQuestions.length - 3} more` : '';
         sendNotification(
-            `⚠️ ${overdueCount} Overdue Question${overdueCount > 1 ? 's' : ''}!`,
-            `You have ${overdueCount} DSA question${overdueCount > 1 ? 's' : ''} past the deadline. Open the tracker to solve them!`,
+            `⚠️ ${overdueQuestions.length} Overdue Question${overdueQuestions.length > 1 ? 's' : ''}!`,
+            `Pending questions past deadline:\n${questionNames}${moreText}`,
             'overdue'
         );
-    } else if (dueTodayCount > 0) {
+    } else if (dueTodayQuestions.length > 0) {
+        const nearest = dueTodayQuestions[0];
+        const questionNames = dueTodayQuestions.slice(0, 3).map(q => `• ${q.task_title}`).join('\n');
+        const moreText = dueTodayQuestions.length > 3 ? `\n...and ${dueTodayQuestions.length - 3} more` : '';
         sendNotification(
-            `📅 ${dueTodayCount} Due Today!`,
-            `You have ${dueTodayCount} DSA question${dueTodayCount > 1 ? 's' : ''} due today. Don't miss your deadline!`,
+            `📅 ${dueTodayQuestions.length} Due Today!`,
+            `Solve these before deadline:\n${questionNames}${moreText}`,
             'due-today'
         );
-    } else if (dueTomorrowCount > 0) {
+    } else if (dueTomorrowQuestions.length > 0) {
+        const nearest = dueTomorrowQuestions[0];
+        const questionNames = dueTomorrowQuestions.slice(0, 3).map(q => `• ${q.task_title}`).join('\n');
+        const moreText = dueTomorrowQuestions.length > 3 ? `\n...and ${dueTomorrowQuestions.length - 3} more` : '';
         sendNotification(
-            `🔔 ${dueTomorrowCount} Due Tomorrow`,
-            `You have ${dueTomorrowCount} DSA question${dueTomorrowCount > 1 ? 's' : ''} due tomorrow. Plan ahead!`,
+            `🔔 ${dueTomorrowQuestions.length} Due Tomorrow`,
+            `Upcoming deadlines:\n${questionNames}${moreText}`,
             'due-tomorrow'
         );
     }
