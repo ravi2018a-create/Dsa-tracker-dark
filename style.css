@@ -312,7 +312,8 @@ body {
 .manual-controls {
     display: flex; gap: 12px; margin-top: 12px;
 }
-.manual-controls select {
+.manual-controls select,
+.manual-controls input {
     flex: 1; padding: 10px 12px; 
     border: 1px solid var(--border); 
     border-radius: var(--radius);
@@ -321,7 +322,9 @@ body {
     color: var(--text);
     cursor: pointer;
 }
-.manual-controls select:focus {
+.manual-controls input::placeholder { color: var(--text3); }
+.manual-controls select:focus,
+.manual-controls input:focus {
     outline: none;
     border-color: var(--primary);
 }
@@ -460,6 +463,17 @@ body {
 .q-deadline.due-today { color: var(--warning); font-weight: 600; }
 
 .q-notes { font-size: .82rem; color: var(--text2); margin-top: 6px; font-style: italic; }
+.q-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .8rem;
+    font-weight: 600;
+    margin-top: 8px;
+    color: var(--primary);
+    text-decoration: none;
+}
+.q-link:hover { text-decoration: underline; }
 
 .q-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .q-actions button {

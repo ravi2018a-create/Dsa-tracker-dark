@@ -24,6 +24,7 @@ const editOverlay   = $('#edit-overlay');
 const addInput      = $('#add-input');
 const addBtn        = $('#add-btn');
 const addTopic      = $('#add-topic');
+const addLink       = $('#add-link');
 const searchEl      = $('#search');
 const fTopic        = $('#filter-topic');
 const fStatus       = $('#filter-status');
@@ -358,10 +359,31 @@ function getDeadlineInDays(n) {
     return d.toISOString().split('T')[0]; // YYYY-MM-DD
 }
 
+function normalizeQuestionLink(rawLink) {
+    const link = (rawLink || '').trim();
+    if (!link) return { ok: true, value: '' };
+
+    const candidate = /^https?:\/\//i.test(link) ? link : `https://${link}`;
+    try {
+        const parsed = new URL(candidate);
+        if (!['http:', 'https:'].includes(parsed.protocol)) return { ok: false, value: '' };
+        return { ok: true, value: parsed.href };
+    } catch {
+        return { ok: false, value: '' };
+    }
+}
+
 // ─── Add button ───
 addBtn.onclick = async () => {
     const raw = addInput.value.trim();
     if (!raw) { toast('Paste at least one question.', 'error'); return; }
+
+    const normalizedAddLink = normalizeQuestionLink(addLink?.value || '');
+    if (!normalizedAddLink.ok) {
+        toast('Please enter a valid question link.', 'error');
+        return;
+    }
+    const defaultQuestionLink = smartMode ? '' : normalizedAddLink.value;
 
     let rows;
 
@@ -375,6 +397,7 @@ addBtn.onclick = async () => {
             task_title: q.title,
             task_description: '',
             topic: q.topic === 'General' ? addTopic.value : q.topic,
+            question_link: defaultQuestionLink,
             status: 'Pending',
             due_date: getDeadlineInDays(index + 1)
         }));
@@ -392,6 +415,7 @@ addBtn.onclick = async () => {
             task_title: title,
             task_description: '',
             topic,
+            question_link: defaultQuestionLink,
             status: 'Pending',
             due_date: getDeadlineInDays(index + 1)
         }));
@@ -419,6 +443,7 @@ addBtn.onclick = async () => {
 
     tasks = [...tasks, ...(data || [])];
     addInput.value = '';
+    if (addLink) addLink.value = '';
     previewEl.classList.add('hidden');
     render();
 
@@ -543,6 +568,7 @@ function openEdit(t) {
     $('#edit-id').value = t.task_id;
     $('#edit-title').value = t.task_title;
     $('#edit-notes').value = t.task_description || '';
+    $('#edit-link').value = t.question_link || '';
     $('#edit-topic').value = t.topic || 'Arrays';
     $('#edit-deadline').value = t.due_date || '';
     editOverlay.classList.remove('hidden');
@@ -557,9 +583,16 @@ $('#edit-save').onclick = async () => {
     const title = $('#edit-title').value.trim();
     if (!title) { toast('Title cannot be empty', 'error'); return; }
 
+    const normalizedEditLink = normalizeQuestionLink($('#edit-link').value);
+    if (!normalizedEditLink.ok) {
+        toast('Please enter a valid question link.', 'error');
+        return;
+    }
+
     const updates = {
         task_title: title,
         task_description: $('#edit-notes').value.trim(),
+        question_link: normalizedEditLink.value,
         topic: $('#edit-topic').value,
         due_date: $('#edit-deadline').value || null,
         updated_at: new Date().toISOString()
@@ -648,6 +681,7 @@ function render() {
                     ${statusTag}
                 </div>
                 ${t.task_description ? `<div class="q-notes">${esc(t.task_description)}</div>` : ''}
+                ${t.question_link ? `<a class="q-link" href="${esc(t.question_link)}" target="_blank" rel="noopener noreferrer">🔗 Open Question</a>` : ''}
             </div>
             <div class="q-actions">
                 ${solved && t.solution_code ? '<button class="view-code-btn" title="View Code">💻</button>' : ''}
