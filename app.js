@@ -459,6 +459,7 @@ addBtn.onclick = async () => {
 const codeOverlay = $('#code-overlay');
 const codeTaskId = $('#code-task-id');
 const codeInput = $('#code-input');
+const codeLink = $('#code-link');
 
 async function toggle(id) {
     const t = tasks.find(x => x.task_id === id);
@@ -468,6 +469,7 @@ async function toggle(id) {
     if (t.status !== 'Completed') {
         codeTaskId.value = id;
         codeInput.value = t.solution_code || '';
+        if (codeLink) codeLink.value = t.question_link || '';
         codeOverlay.classList.remove('hidden');
         codeInput.focus();
         return;
@@ -485,6 +487,7 @@ async function toggle(id) {
 $('#code-cancel').onclick = () => {
     codeOverlay.classList.add('hidden');
     codeInput.value = '';
+    if (codeLink) codeLink.value = '';
     render(); // Reset checkbox state
 };
 
@@ -492,6 +495,7 @@ codeOverlay.onclick = e => {
     if (e.target === codeOverlay) {
         codeOverlay.classList.add('hidden');
         codeInput.value = '';
+        if (codeLink) codeLink.value = '';
         render();
     }
 };
@@ -502,11 +506,18 @@ $('#code-submit').onclick = async () => {
         toast('Please paste your code before marking as solved!', 'error');
         return;
     }
+
+    const normalizedCodeLink = normalizeQuestionLink(codeLink?.value || '');
+    if (!normalizedCodeLink.ok) {
+        toast('Please enter a valid question link.', 'error');
+        return;
+    }
     
     const id = parseInt(codeTaskId.value);
     const { data, error } = await db.from('tasks').update({ 
         status: 'Completed', 
         solution_code: code,
+        question_link: normalizedCodeLink.value,
         updated_at: new Date().toISOString() 
     }).eq('task_id', id).eq('user_id', user.id).select().single();
     
@@ -517,6 +528,7 @@ $('#code-submit').onclick = async () => {
     
     codeOverlay.classList.add('hidden');
     codeInput.value = '';
+    if (codeLink) codeLink.value = '';
     render();
     
     // Show Late/On Time feedback
