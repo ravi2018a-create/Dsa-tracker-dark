@@ -78,7 +78,7 @@ function restoreCurrentTopic() {
 currentTopic.addEventListener('change', () => {
     saveCurrentTopic();
     fTopic.value = 'all';
-    fStatus.value = 'all';
+    fStatus.value = 'Pending';
     saveFilters();
     render();
 });
@@ -843,7 +843,7 @@ function updateTopicStats() {
             currentTopic.value = topic;
             saveCurrentTopic();
             fTopic.value = 'all';
-            fStatus.value = 'all';
+            fStatus.value = 'Pending';
             saveFilters();
             render();
             toast(`Switched to ${topic}`, 'info');
