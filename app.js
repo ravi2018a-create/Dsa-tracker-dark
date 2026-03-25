@@ -25,6 +25,7 @@ const addInput      = $('#add-input');
 const addBtn        = $('#add-btn');
 const addTopic      = $('#add-topic');
 const addLink       = $('#add-link');
+const currentTopic  = $('#current-topic');
 const searchEl      = $('#search');
 const fTopic        = $('#filter-topic');
 const fStatus       = $('#filter-status');
@@ -37,6 +38,7 @@ let tasks = [];
 //  FILTER PERSISTENCE
 // ============================================
 const FILTER_STORAGE_KEY = 'dsa-tracker-filters';
+const CURRENT_TOPIC_KEY = 'dsa-tracker-current-topic';
 
 function saveFilters() {
     const filters = {
@@ -60,6 +62,27 @@ function restoreFilters() {
     } catch (e) { /* ignore parse errors */ }
 }
 
+function saveCurrentTopic() {
+    localStorage.setItem(CURRENT_TOPIC_KEY, currentTopic.value);
+    addTopic.value = currentTopic.value;
+}
+
+function restoreCurrentTopic() {
+    const saved = localStorage.getItem(CURRENT_TOPIC_KEY);
+    if (saved) {
+        currentTopic.value = saved;
+        addTopic.value = saved;
+    }
+}
+
+currentTopic.addEventListener('change', () => {
+    saveCurrentTopic();
+    fTopic.value = 'all';
+    fStatus.value = 'all';
+    saveFilters();
+    render();
+});
+
 // ============================================
 //  AUTH STATE LISTENER
 // ============================================
@@ -70,6 +93,7 @@ db.auth.onAuthStateChange((event, session) => {
         appContainer.classList.remove('hidden');
         $('#user-email').textContent = user.email;
         restoreFilters();
+        restoreCurrentTopic();
         loadAll();
     } else {
         authContainer.classList.remove('hidden');
@@ -120,9 +144,23 @@ async function loadAll() {
     loadingEl.classList.add('hidden');
     if (error) { toast('Load failed: ' + error.message, 'error'); return; }
     tasks = data || [];
+    await clearUnscheduledDeadlines();
     render();
     // Check for deadline notifications after loading
     setTimeout(() => checkDeadlinesAndNotify(), 2000);
+}
+
+// Clear due_dates for topics that haven't been explicitly scheduled
+async function clearUnscheduledDeadlines() {
+    const schedules = getAllSchedules();
+    const tasksToFix = tasks.filter(t => t.due_date && !schedules[t.topic]);
+    if (tasksToFix.length === 0) return;
+
+    const ids = tasksToFix.map(t => t.task_id);
+    await db.from('tasks').update({ due_date: null }).in('task_id', ids).eq('user_id', user.id);
+
+    // Update locally
+    tasksToFix.forEach(t => { t.due_date = null; });
 }
 
 // ============================================
@@ -396,13 +434,13 @@ addBtn.onclick = async () => {
             user_id: user.id,
             task_title: q.title,
             task_description: '',
-            topic: q.topic === 'General' ? addTopic.value : q.topic,
+            topic: q.topic === 'General' ? currentTopic.value : q.topic,
             question_link: defaultQuestionLink,
             status: 'Pending',
-            due_date: getDeadlineInDays(index + 1)
+            due_date: null
         }));
     } else {
-        const topic = addTopic.value;
+        const topic = currentTopic.value;
         const lines = raw.split(/\n/)
             .map(l => l.replace(/^\s*[\d]+[\.\)\-\:]\s*/, '').trim())
             .filter(l => l.length > 0);
@@ -417,7 +455,7 @@ addBtn.onclick = async () => {
             topic,
             question_link: defaultQuestionLink,
             status: 'Pending',
-            due_date: getDeadlineInDays(index + 1)
+            due_date: null
         }));
     }
 
@@ -448,7 +486,7 @@ addBtn.onclick = async () => {
     render();
 
     const daysRange = data.length === 1 ? '1 day' : `1-${data.length} days`;
-    let msg = `Added ${data.length} question${data.length > 1 ? 's' : ''} with ${daysRange} deadlines!`;
+    let msg = `Added ${data.length} question${data.length > 1 ? 's' : ''}! Use "📅 Schedule" on the topic card to set deadlines.`;
     if (skipped > 0) msg += ` (${skipped} duplicate${skipped > 1 ? 's' : ''} skipped)`;
     toast(msg, 'success');
 };
@@ -629,7 +667,8 @@ fStatus.addEventListener('change', () => { saveFilters(); render(); });
 sortEl.addEventListener('change', () => { saveFilters(); render(); });
 
 function render() {
-    let list = [...tasks];
+    // Filter by current topic first
+    let list = tasks.filter(t => t.topic === currentTopic.value);
 
     // Search
     const q = searchEl.value.trim().toLowerCase();
@@ -719,9 +758,10 @@ function render() {
 //  STATS
 // ============================================
 function updateStats() {
-    const total = tasks.length;
-    const solved = tasks.filter(t => t.status === 'Completed').length;
-    const overdue = tasks.filter(t => isOverdue(t.due_date, t.status)).length;
+    const topicTasks = tasks.filter(t => t.topic === currentTopic.value);
+    const total = topicTasks.length;
+    const solved = topicTasks.filter(t => t.status === 'Completed').length;
+    const overdue = topicTasks.filter(t => isOverdue(t.due_date, t.status)).length;
     const pct = total === 0 ? 0 : Math.round((solved / total) * 100);
 
     $('#stat-total').textContent = total;
@@ -751,21 +791,36 @@ function updateTopicStats() {
     const topicData = {};
     tasks.forEach(t => {
         const topic = t.topic || 'General';
-        if (!topicData[topic]) topicData[topic] = { total: 0, solved: 0 };
+        if (!topicData[topic]) topicData[topic] = { total: 0, solved: 0, dates: [] };
         topicData[topic].total++;
         if (t.status === 'Completed') topicData[topic].solved++;
+        if (t.due_date) topicData[topic].dates.push(t.due_date);
     });
 
     // Sort by total questions (descending)
     const sortedTopics = Object.entries(topicData).sort((a, b) => b[1].total - a[1].total);
 
-    let html = '<div class="topic-stats-header">📊 Topic-wise Progress</div><div class="topic-stats-grid">';
+    let html = '<div class="topic-stats-header">📊 Topic-wise Progress — Click to view, 📅 to schedule</div><div class="topic-stats-grid">';
     sortedTopics.forEach(([topic, data]) => {
         const pct = Math.round((data.solved / data.total) * 100);
         const isComplete = data.solved === data.total;
+        // Show actual deadline range from questions, not saved schedule
+        let scheduleInfo;
+        if (data.dates.length > 0) {
+            const sortedDates = data.dates.sort();
+            const minDate = sortedDates[0];
+            const maxDate = sortedDates[sortedDates.length - 1];
+            scheduleInfo = `<span class="topic-schedule-info">📅 ${fmtDateShort(minDate)} — ${fmtDateShort(maxDate)}</span>`;
+        } else {
+            scheduleInfo = '<span class="topic-schedule-info unscheduled">Not scheduled</span>';
+        }
         html += `
-            <div class="topic-stat-item${isComplete ? ' complete' : ''}">
-                <div class="topic-stat-name">${esc(topic)}</div>
+            <div class="topic-stat-item${isComplete ? ' complete' : ''}" data-topic="${esc(topic)}">
+                <div class="topic-stat-top">
+                    <div class="topic-stat-name">${esc(topic)}</div>
+                    <button class="topic-schedule-btn" data-topic="${esc(topic)}" title="Schedule this topic">📅</button>
+                </div>
+                ${scheduleInfo}
                 <div class="topic-stat-progress">
                     <div class="topic-stat-bar">
                         <div class="topic-stat-fill" style="width: ${pct}%"></div>
@@ -778,7 +833,251 @@ function updateTopicStats() {
     });
     html += '</div>';
     topicStatsEl.innerHTML = html;
+
+    // Click topic card → set current topic and show its questions
+    topicStatsEl.querySelectorAll('.topic-stat-item').forEach(el => {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('.topic-schedule-btn')) return; // don't trigger on schedule btn
+            const topic = el.dataset.topic;
+            currentTopic.value = topic;
+            saveCurrentTopic();
+            fTopic.value = 'all';
+            fStatus.value = 'all';
+            saveFilters();
+            render();
+            toast(`Switched to ${topic}`, 'info');
+        });
+    });
+
+    // Schedule button click
+    topicStatsEl.querySelectorAll('.topic-schedule-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openScheduleModal(btn.dataset.topic);
+        });
+    });
 }
+
+// ============================================
+//  TOPIC SCHEDULING SYSTEM
+// ============================================
+const SCHEDULE_KEY = 'dsa-tracker-schedules';
+
+function getAllSchedules() {
+    try {
+        return JSON.parse(localStorage.getItem(SCHEDULE_KEY) || '{}');
+    } catch { return {}; }
+}
+
+function getTopicSchedule(topic) {
+    return getAllSchedules()[topic] || null;
+}
+
+function saveTopicSchedule(topic, startDate, endDate) {
+    const schedules = getAllSchedules();
+    schedules[topic] = { startDate, endDate };
+    localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedules));
+}
+
+function removeTopicSchedule(topic) {
+    const schedules = getAllSchedules();
+    delete schedules[topic];
+    localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedules));
+}
+
+function fmtDateShort(d) {
+    if (!d) return '';
+    const dt = new Date(d + 'T00:00:00');
+    const day = dt.getDate();
+    const suffix = getDaySuffix(day);
+    const month = dt.toLocaleDateString('en-US', { month: 'short' });
+    return `${day}${suffix} ${month}`;
+}
+
+// Get all dates occupied by other topics (not the given topic) — from actual task deadlines
+function getOccupiedDates(excludeTopic) {
+    const topicDates = {};
+    tasks.forEach(t => {
+        if (t.topic === excludeTopic || !t.due_date) return;
+        if (!topicDates[t.topic]) topicDates[t.topic] = [];
+        topicDates[t.topic].push(t.due_date);
+    });
+    const occupied = [];
+    for (const [topic, dates] of Object.entries(topicDates)) {
+        const sorted = dates.sort();
+        occupied.push({ topic, start: sorted[0], end: sorted[sorted.length - 1] });
+    }
+    return occupied;
+}
+
+function isDateOccupied(dateStr, excludeTopic) {
+    const occupied = getOccupiedDates(excludeTopic);
+    for (const o of occupied) {
+        if (dateStr >= o.start && dateStr <= o.end) return o.topic;
+    }
+    return null;
+}
+
+// Check if a range conflicts with existing schedules
+function getConflicts(startDate, endDate, excludeTopic) {
+    const occupied = getOccupiedDates(excludeTopic);
+    const conflicts = [];
+    for (const o of occupied) {
+        if (startDate <= o.end && endDate >= o.start) {
+            conflicts.push(o);
+        }
+    }
+    return conflicts;
+}
+
+function openScheduleModal(topic) {
+    const modal = $('#schedule-overlay');
+    const topicTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
+    const totalUnsolved = topicTasks.length;
+    
+    if (totalUnsolved === 0) {
+        toast(`No unsolved questions in ${topic}!`, 'info');
+        return;
+    }
+
+    $('#schedule-topic-name').textContent = topic;
+    $('#schedule-topic-input').value = topic;
+    $('#schedule-question-count').textContent = `${totalUnsolved} unsolved question${totalUnsolved > 1 ? 's' : ''} — 1 per day`;
+    
+    const existing = getTopicSchedule(topic);
+    const startInput = $('#schedule-start-date');
+    startInput.value = existing ? existing.startDate : '';
+    startInput.min = getToday();
+    
+    // Set occupied dates info
+    updateScheduleConflictInfo(topic);
+    
+    $('#schedule-end-preview').textContent = '';
+    modal.classList.remove('hidden');
+    startInput.focus();
+}
+
+function updateScheduleConflictInfo(topic) {
+    const occupied = getOccupiedDates(topic);
+    const infoEl = $('#schedule-occupied-info');
+    if (occupied.length === 0) {
+        infoEl.innerHTML = '<span class="schedule-ok">✅ No other topics scheduled — all dates available</span>';
+    } else {
+        let html = '<span class="schedule-warn">Occupied date ranges:</span><ul class="schedule-occupied-list">';
+        occupied.forEach(o => {
+            html += `<li>📅 <strong>${esc(o.topic)}</strong>: ${fmtDateShort(o.start)} — ${fmtDateShort(o.end)}</li>`;
+        });
+        html += '</ul>';
+        infoEl.innerHTML = html;
+    }
+}
+
+// Schedule modal event handlers
+$('#schedule-start-date').addEventListener('input', function() {
+    const topic = $('#schedule-topic-input').value;
+    const topicTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
+    const startDate = this.value;
+    
+    if (!startDate || topicTasks.length === 0) {
+        $('#schedule-end-preview').textContent = '';
+        $('#schedule-conflict-warn').innerHTML = '';
+        return;
+    }
+
+    const d = new Date(startDate + 'T00:00:00');
+    d.setDate(d.getDate() + topicTasks.length - 1);
+    const endDate = d.toISOString().split('T')[0];
+    
+    $('#schedule-end-preview').textContent = `End date: ${fmtDateShort(endDate)} (${topicTasks.length} days)`;
+    
+    // Check for conflicts
+    const conflicts = getConflicts(startDate, endDate, topic);
+    const warnEl = $('#schedule-conflict-warn');
+    if (conflicts.length > 0) {
+        let html = '<div class="schedule-conflict">⚠️ <strong>Date conflict!</strong> Overlaps with:<ul>';
+        conflicts.forEach(c => {
+            html += `<li><strong>${esc(c.topic)}</strong>: ${fmtDateShort(c.start)} — ${fmtDateShort(c.end)}</li>`;
+        });
+        html += '</ul>You can still schedule, but consider picking another date.</div>';
+        warnEl.innerHTML = html;
+    } else {
+        warnEl.innerHTML = '<div class="schedule-no-conflict">✅ No conflicts — dates are free!</div>';
+    }
+});
+
+$('#schedule-cancel').onclick = () => {
+    $('#schedule-overlay').classList.add('hidden');
+};
+
+$('#schedule-overlay').onclick = e => {
+    if (e.target === $('#schedule-overlay')) $('#schedule-overlay').classList.add('hidden');
+};
+
+$('#schedule-save').onclick = async () => {
+    const topic = $('#schedule-topic-input').value;
+    const startDate = $('#schedule-start-date').value;
+    
+    if (!startDate) {
+        toast('Please select a start date.', 'error');
+        return;
+    }
+    
+    const topicTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
+    if (topicTasks.length === 0) {
+        toast('No unsolved questions to schedule!', 'info');
+        return;
+    }
+
+    // Calculate end date
+    const endD = new Date(startDate + 'T00:00:00');
+    endD.setDate(endD.getDate() + topicTasks.length - 1);
+    const endDate = endD.toISOString().split('T')[0];
+
+    // Assign deadlines: question 1 = startDate, question 2 = startDate+1, etc.
+    const updates = topicTasks.map((t, i) => {
+        const d = new Date(startDate + 'T00:00:00');
+        d.setDate(d.getDate() + i);
+        return { id: t.task_id, due_date: d.toISOString().split('T')[0] };
+    });
+
+    // Update in DB
+    let failed = 0;
+    for (const u of updates) {
+        const { error } = await db.from('tasks').update({ due_date: u.due_date, updated_at: new Date().toISOString() }).eq('task_id', u.id).eq('user_id', user.id);
+        if (error) failed++;
+    }
+
+    if (failed > 0) {
+        toast(`${failed} updates failed. Try again.`, 'error');
+        return;
+    }
+
+    // Update local tasks
+    updates.forEach(u => {
+        const t = tasks.find(x => x.task_id === u.id);
+        if (t) t.due_date = u.due_date;
+    });
+
+    // Save schedule
+    saveTopicSchedule(topic, startDate, endDate);
+
+    // Switch to this topic
+    currentTopic.value = topic;
+    saveCurrentTopic();
+
+    $('#schedule-overlay').classList.add('hidden');
+    render();
+    toast(`📅 ${topic} scheduled: ${fmtDateShort(startDate)} — ${fmtDateShort(endDate)}`, 'success');
+};
+
+$('#schedule-remove').onclick = () => {
+    const topic = $('#schedule-topic-input').value;
+    removeTopicSchedule(topic);
+    $('#schedule-overlay').classList.add('hidden');
+    render();
+    toast(`Schedule removed for ${topic}`, 'info');
+};
 
 // ============================================
 //  DELETE ALL

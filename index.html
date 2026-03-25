@@ -63,11 +63,40 @@
             <button id="delete-all-btn" class="btn-delete-all hidden">🗑️ Delete All</button>
         </div>
 
+        <!-- Current Topic Timeline -->
+        <!-- moved inside add-section -->
+
         <!-- Topic Stats -->
         <div class="topic-stats" id="topic-stats"></div>
 
         <!-- Add Section -->
         <div class="add-section">
+            <div class="current-topic-bar">
+                <label for="current-topic">📌 Current Topic:</label>
+                <select id="current-topic">
+                    <option value="Arrays">Arrays</option>
+                    <option value="Strings">Strings</option>
+                    <option value="Linked List">Linked List</option>
+                    <option value="Stack">Stack</option>
+                    <option value="Queue">Queue</option>
+                    <option value="Hashing">Hashing</option>
+                    <option value="Tree">Tree</option>
+                    <option value="BST">BST</option>
+                    <option value="Heap">Heap</option>
+                    <option value="Graph">Graph</option>
+                    <option value="Recursion">Recursion</option>
+                    <option value="Backtracking">Backtracking</option>
+                    <option value="Dynamic Programming">Dynamic Programming</option>
+                    <option value="Greedy">Greedy</option>
+                    <option value="Binary Search">Binary Search</option>
+                    <option value="Sliding Window">Sliding Window</option>
+                    <option value="Two Pointers">Two Pointers</option>
+                    <option value="Bit Manipulation">Bit Manipulation</option>
+                    <option value="Math">Math</option>
+                    <option value="Trie">Trie</option>
+                    <option value="Segment Tree">Segment Tree</option>
+                </select>
+            </div>
             <div class="add-mode-tabs">
                 <button class="mode-tab active" id="mode-smart">🧠 Smart Paste</button>
                 <button class="mode-tab" id="mode-manual">✍️ Manual</button>
@@ -235,6 +264,25 @@ Best Time to Buy and Sell Stock"></textarea>
         </div>
 
         <div id="toast-box"></div>
+
+        <!-- Schedule Topic Modal -->
+        <div class="edit-overlay hidden" id="schedule-overlay">
+            <div class="edit-modal schedule-modal">
+                <h3>📅 Schedule Topic: <span id="schedule-topic-name"></span></h3>
+                <input type="hidden" id="schedule-topic-input">
+                <p class="schedule-hint" id="schedule-question-count"></p>
+                <div id="schedule-occupied-info" class="schedule-occupied-info"></div>
+                <label>Start Date</label>
+                <input type="date" id="schedule-start-date">
+                <div id="schedule-end-preview" class="schedule-end-preview"></div>
+                <div id="schedule-conflict-warn"></div>
+                <div class="edit-actions">
+                    <button id="schedule-remove" class="btn btn-sm btn-danger-outline">Remove Schedule</button>
+                    <button id="schedule-cancel" class="btn btn-sm">Cancel</button>
+                    <button id="schedule-save" class="btn btn-primary btn-sm">📅 Schedule</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

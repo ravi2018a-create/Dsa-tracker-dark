@@ -213,6 +213,113 @@ body {
 }
 .btn-delete-all:disabled { opacity: .5; cursor: not-allowed; }
 
+/* ─── TOPIC CARDS INTERACTIVE ─── */
+.topic-stat-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.topic-schedule-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: .8rem;
+    cursor: pointer;
+    transition: all .2s;
+}
+.topic-schedule-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: scale(1.1);
+}
+.topic-schedule-info {
+    font-size: .7rem;
+    color: var(--primary);
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+.topic-schedule-info.unscheduled {
+    color: var(--text3);
+    font-style: italic;
+}
+
+/* ─── SCHEDULE MODAL ─── */
+.schedule-modal {
+    max-width: 480px;
+}
+.schedule-hint {
+    color: var(--text2);
+    font-size: .85rem;
+    margin-bottom: 12px;
+}
+.schedule-occupied-info {
+    margin-bottom: 14px;
+    font-size: .82rem;
+}
+.schedule-ok {
+    color: var(--success);
+    font-weight: 500;
+}
+.schedule-warn {
+    color: var(--warning);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 6px;
+}
+.schedule-occupied-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.schedule-occupied-list li {
+    padding: 4px 0;
+    color: var(--text2);
+    font-size: .82rem;
+}
+.schedule-end-preview {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin-top: 8px;
+    min-height: 20px;
+}
+.schedule-conflict {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-top: 10px;
+    font-size: .82rem;
+    color: var(--danger);
+}
+.schedule-conflict ul {
+    list-style: none;
+    padding: 0;
+    margin: 4px 0 0;
+}
+.schedule-conflict li {
+    padding: 2px 0;
+}
+.schedule-no-conflict {
+    color: var(--success);
+    font-size: .85rem;
+    font-weight: 500;
+    margin-top: 10px;
+}
+.btn-danger-outline {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+.btn-danger-outline:hover {
+    background: var(--danger);
+    color: white;
+}
+
 /* ─── TOPIC STATS ─── */
 .topic-stats {
     padding: 18px 28px;
@@ -328,6 +435,40 @@ body {
     outline: none;
     border-color: var(--primary);
 }
+/* ─── CURRENT TOPIC BAR ─── */
+.current-topic-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 12px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+.current-topic-bar label {
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+}
+.current-topic-bar select {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--primary);
+    border-radius: var(--radius);
+    font-family: var(--font);
+    font-size: .88rem;
+    font-weight: 600;
+    background: var(--surface);
+    color: var(--primary);
+    cursor: pointer;
+}
+.current-topic-bar select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
 .btn-add { margin-top: 16px; width: 100%; }
 
 /* Parse Preview */
