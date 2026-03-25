@@ -833,8 +833,31 @@ function updateTopicStats() {
         if (t.due_date) topicData[topic].dates.push(t.due_date);
     });
 
-    // Sort by total questions (descending)
-    const sortedTopics = Object.entries(topicData).sort((a, b) => b[1].total - a[1].total);
+    // Sort: 1) Completed topics first, 2) By nearest deadline (soonest first), 3) Unscheduled last
+    const sortedTopics = Object.entries(topicData).sort((a, b) => {
+        const aComplete = a[1].solved === a[1].total;
+        const bComplete = b[1].solved === b[1].total;
+        
+        // Completed topics come first
+        if (aComplete && !bComplete) return -1;
+        if (!aComplete && bComplete) return 1;
+        
+        // Get earliest deadline for each topic
+        const aSchedule = getTopicSchedule(a[0]);
+        const bSchedule = getTopicSchedule(b[0]);
+        const aStart = aSchedule?.startDate || (a[1].dates.length > 0 ? a[1].dates.sort()[0] : null);
+        const bStart = bSchedule?.startDate || (b[1].dates.length > 0 ? b[1].dates.sort()[0] : null);
+        
+        // Scheduled topics before unscheduled
+        if (aStart && !bStart) return -1;
+        if (!aStart && bStart) return 1;
+        
+        // Both scheduled: sort by earliest deadline (soonest first)
+        if (aStart && bStart) return aStart.localeCompare(bStart);
+        
+        // Both unscheduled: sort by total questions (descending)
+        return b[1].total - a[1].total;
+    });
 
     let html = '<div class="topic-stats-header">📊 Topic-wise Progress — Click to view, 📅 to schedule</div><div class="topic-stats-grid">';
     sortedTopics.forEach(([topic, data]) => {
