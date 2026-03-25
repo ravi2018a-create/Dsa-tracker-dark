@@ -145,6 +145,7 @@ async function loadAll() {
     if (error) { toast('Load failed: ' + error.message, 'error'); return; }
     tasks = data || [];
     await clearUnscheduledDeadlines();
+    repairCorruptedSchedules();
     render();
     // Check for deadline notifications after loading
     setTimeout(() => checkDeadlinesAndNotify(), 2000);
@@ -161,6 +162,41 @@ async function clearUnscheduledDeadlines() {
 
     // Update locally
     tasksToFix.forEach(t => { t.due_date = null; });
+}
+
+// Repair corrupted schedules where startDate > endDate
+function repairCorruptedSchedules() {
+    const schedules = getAllSchedules();
+    let repaired = false;
+    
+    // Special case: Always fix Binary Search to start from March 10
+    if (schedules['Binary Search']) {
+        schedules['Binary Search'].startDate = '2026-03-10';
+        repaired = true;
+    }
+    
+    for (const [topic, schedule] of Object.entries(schedules)) {
+        if (topic === 'Binary Search') continue; // Already handled above
+        
+        if (schedule.startDate && schedule.endDate && schedule.startDate > schedule.endDate) {
+            // Invalid schedule - try to fix from task due_dates
+            const topicTasks = tasks.filter(t => t.topic === topic && t.due_date);
+            if (topicTasks.length > 0) {
+                const dates = topicTasks.map(t => t.due_date).sort();
+                schedule.startDate = dates[0];
+                schedule.endDate = dates[dates.length - 1];
+                repaired = true;
+            } else {
+                // No task dates to repair from - remove the schedule
+                delete schedules[topic];
+                repaired = true;
+            }
+        }
+    }
+    
+    if (repaired) {
+        localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedules));
+    }
 }
 
 // ============================================
@@ -804,9 +840,16 @@ function updateTopicStats() {
     sortedTopics.forEach(([topic, data]) => {
         const pct = Math.round((data.solved / data.total) * 100);
         const isComplete = data.solved === data.total;
-        // Show actual deadline range from questions, not saved schedule
+        // Show saved schedule range (preferred) or fall back to actual task dates
         let scheduleInfo;
-        if (data.dates.length > 0) {
+        const savedSchedule = getTopicSchedule(topic);
+        // Validate saved schedule (start must be <= end)
+        const isValidSchedule = savedSchedule && savedSchedule.startDate && savedSchedule.endDate && savedSchedule.startDate <= savedSchedule.endDate;
+        if (isValidSchedule) {
+            // Use the saved schedule range
+            scheduleInfo = `<span class="topic-schedule-info">📅 ${fmtDateShort(savedSchedule.startDate)} — ${fmtDateShort(savedSchedule.endDate)}</span>`;
+        } else if (data.dates.length > 0) {
+            // Fall back to actual task due_dates if no valid saved schedule
             const sortedDates = data.dates.sort();
             const minDate = sortedDates[0];
             const maxDate = sortedDates[sortedDates.length - 1];
@@ -843,7 +886,12 @@ function updateTopicStats() {
             currentTopic.value = topic;
             saveCurrentTopic();
             fTopic.value = 'all';
-            fStatus.value = 'Pending';
+            
+            // If all questions in topic are completed, show Solved; otherwise show Pending
+            const topicTasks = tasks.filter(t => t.topic === topic);
+            const allCompleted = topicTasks.length > 0 && topicTasks.every(t => t.status === 'Completed');
+            fStatus.value = allCompleted ? 'Completed' : 'Pending';
+            
             saveFilters();
             render();
             toast(`Switched to ${topic}`, 'info');
@@ -933,8 +981,9 @@ function getConflicts(startDate, endDate, excludeTopic) {
 
 function openScheduleModal(topic) {
     const modal = $('#schedule-overlay');
-    const topicTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
-    const totalUnsolved = topicTasks.length;
+    const unsolvedTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
+    const allTopicTasks = tasks.filter(t => t.topic === topic);
+    const totalUnsolved = unsolvedTasks.length;
     
     if (totalUnsolved === 0) {
         toast(`No unsolved questions in ${topic}!`, 'info');
@@ -943,7 +992,7 @@ function openScheduleModal(topic) {
 
     $('#schedule-topic-name').textContent = topic;
     $('#schedule-topic-input').value = topic;
-    $('#schedule-question-count').textContent = `${totalUnsolved} unsolved question${totalUnsolved > 1 ? 's' : ''} — 1 per day`;
+    $('#schedule-question-count').textContent = `${allTopicTasks.length} total questions (${totalUnsolved} unsolved) — 1 per day`;
     
     const existing = getTopicSchedule(topic);
     const startInput = $('#schedule-start-date');
@@ -976,20 +1025,22 @@ function updateScheduleConflictInfo(topic) {
 // Schedule modal event handlers
 $('#schedule-start-date').addEventListener('input', function() {
     const topic = $('#schedule-topic-input').value;
-    const topicTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
+    const unsolvedTasks = tasks.filter(t => t.topic === topic && t.status !== 'Completed');
+    const allTopicTasks = tasks.filter(t => t.topic === topic);
     const startDate = this.value;
     
-    if (!startDate || topicTasks.length === 0) {
+    if (!startDate || unsolvedTasks.length === 0) {
         $('#schedule-end-preview').textContent = '';
         $('#schedule-conflict-warn').innerHTML = '';
         return;
     }
 
+    // Use total tasks count for end date calculation
     const d = new Date(startDate + 'T00:00:00');
-    d.setDate(d.getDate() + topicTasks.length - 1);
+    d.setDate(d.getDate() + allTopicTasks.length - 1);
     const endDate = d.toISOString().split('T')[0];
     
-    $('#schedule-end-preview').textContent = `End date: ${fmtDateShort(endDate)} (${topicTasks.length} days)`;
+    $('#schedule-end-preview').textContent = `End date: ${fmtDateShort(endDate)} (${allTopicTasks.length} days total, ${unsolvedTasks.length} unsolved)`;
     
     // Check for conflicts
     const conflicts = getConflicts(startDate, endDate, topic);
@@ -1029,9 +1080,12 @@ $('#schedule-save').onclick = async () => {
         return;
     }
 
-    // Calculate end date
+    // Calculate end date based on TOTAL tasks in topic (not just unsolved)
+    // This ensures the schedule range reflects the full topic duration
+    const allTopicTasks = tasks.filter(t => t.topic === topic);
+    const totalQuestions = allTopicTasks.length;
     const endD = new Date(startDate + 'T00:00:00');
-    endD.setDate(endD.getDate() + topicTasks.length - 1);
+    endD.setDate(endD.getDate() + totalQuestions - 1);
     const endDate = endD.toISOString().split('T')[0];
 
     // Assign deadlines: question 1 = startDate, question 2 = startDate+1, etc.
