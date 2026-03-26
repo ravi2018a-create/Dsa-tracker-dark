@@ -593,6 +593,7 @@ body {
 .q-title {
     font-size: 1rem; font-weight: 500; margin-bottom: 8px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    line-clamp: 2;
     color: var(--text);
 }
 .solved .q-title { 
