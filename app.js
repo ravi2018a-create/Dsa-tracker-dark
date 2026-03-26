@@ -23,6 +23,7 @@ const loadingEl     = $('#loading');
 const editOverlay   = $('#edit-overlay');
 const addInput      = $('#add-input');
 const addBtn        = $('#add-btn');
+const queueMustDoBtn = $('#queue-mustdo-btn');
 const addTopic      = $('#add-topic');
 const addLink       = $('#add-link');
 const currentTopic  = $('#current-topic');
@@ -144,6 +145,7 @@ async function loadAll() {
     loadingEl.classList.add('hidden');
     if (error) { toast('Load failed: ' + error.message, 'error'); return; }
     tasks = data || [];
+    await syncAutoQuestionLinks();
     await clearUnscheduledDeadlines();
     repairCorruptedSchedules();
     render();
@@ -227,6 +229,207 @@ const TOPIC_MAP = {
     'trie': 'Trie',
     'segment tree': 'Segment Tree', 'segment trees': 'Segment Tree',
 };
+
+const QUEUE_MUST_DO_QUESTIONS = [
+    'Implement Queue using Arrays',
+    'Implement Queue using Linked List',
+    'Implement Queue using Stacks',
+    'Number of Recent Calls',
+    'Time Needed to Buy Tickets',
+    'Design Circular Queue',
+    'Moving Average from Data Stream',
+    'Sliding Window Maximum',
+    'Shortest Subarray with Sum at Least K',
+    'Rotting Oranges',
+    '01 Matrix',
+    'Binary Tree Level Order Traversal'
+];
+
+const QUESTION_LINKS = {
+    queue: {
+        'implement queue using arrays': 'https://leetcode.com/problems/design-circular-queue/',
+        'implement queue using linked list': 'https://leetcode.com/problems/design-circular-queue/',
+        'implement queue using stacks': 'https://leetcode.com/problems/implement-queue-using-stacks/',
+        'number of recent calls': 'https://leetcode.com/problems/number-of-recent-calls/',
+        'time needed to buy tickets': 'https://leetcode.com/problems/time-needed-to-buy-tickets/',
+        'design circular queue': 'https://leetcode.com/problems/design-circular-queue/',
+        'moving average from data stream': 'https://leetcode.com/problems/moving-average-from-data-stream/',
+        'sliding window maximum': 'https://leetcode.com/problems/sliding-window-maximum/',
+        'shortest subarray with sum at least k': 'https://leetcode.com/problems/shortest-subarray-with-sum-at-least-k/',
+        'rotting oranges': 'https://leetcode.com/problems/rotting-oranges/',
+        '01 matrix': 'https://leetcode.com/problems/01-matrix/',
+        'binary tree level order traversal': 'https://leetcode.com/problems/binary-tree-level-order-traversal/'
+    }
+};
+
+const LEETCODE_CATALOG_URL = 'https://leetcode.com/api/problems/all/';
+let leetCodeSlugByTitle = null;
+let leetCodeCatalogPromise = null;
+
+const LEETCODE_TITLE_SLUG_OVERRIDES = {
+    'two sum ii': 'two-sum-ii-input-array-is-sorted',
+    'two sum ii input array is sorted': 'two-sum-ii-input-array-is-sorted'
+};
+
+function normalizeQuestionTitle(title) {
+    return (title || '')
+        .toLowerCase()
+        .replace(/[\u2018\u2019']/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function titleToLeetCodeSlug(title) {
+    return (title || '')
+        .toLowerCase()
+        .replace(/&/g, ' and ')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-+/g, '-');
+}
+
+function isLeetCodeProblemUrl(url) {
+    if (!url) return false;
+    try {
+        const parsed = new URL(url);
+        return /leetcode\.com$/i.test(parsed.hostname) && /^\/problems\/[^/]+\/?$/i.test(parsed.pathname);
+    } catch {
+        return false;
+    }
+}
+
+function isLeetCodeSearchUrl(url) {
+    if (!url) return false;
+    try {
+        const parsed = new URL(url);
+        return /leetcode\.com$/i.test(parsed.hostname) && /^\/problemset\/?$/i.test(parsed.pathname);
+    } catch {
+        return false;
+    }
+}
+
+function isSubmittedTask(task) {
+    if (!task) return false;
+    if (task.status === 'Completed') return true;
+    return !!(task.solution_code && task.solution_code.trim());
+}
+
+async function getLeetCodeSlugMap() {
+    if (leetCodeSlugByTitle) return leetCodeSlugByTitle;
+    if (leetCodeCatalogPromise) return leetCodeCatalogPromise;
+
+    leetCodeCatalogPromise = (async () => {
+        try {
+            const res = await fetch(LEETCODE_CATALOG_URL);
+            if (!res.ok) throw new Error('Failed to fetch LeetCode catalog');
+
+            const data = await res.json();
+            const map = new Map();
+            const list = data?.stat_status_pairs || [];
+
+            list.forEach(item => {
+                const title = item?.stat?.question__title;
+                const slug = item?.stat?.question__title_slug;
+                if (!title || !slug) return;
+                map.set(normalizeQuestionTitle(title), slug);
+            });
+
+            leetCodeSlugByTitle = map;
+            return map;
+        } catch {
+            leetCodeSlugByTitle = new Map();
+            return leetCodeSlugByTitle;
+        }
+    })();
+
+    return leetCodeCatalogPromise;
+}
+
+function getQuestionLink(title, topic, fallback = '') {
+    const topicKey = (topic || '').toLowerCase().trim();
+    const titleKey = (title || '').toLowerCase().trim();
+    return QUESTION_LINKS[topicKey]?.[titleKey] || fallback;
+}
+
+async function resolveBestQuestionLink(title, topic, fallback = '') {
+    const manual = getQuestionLink(title, topic, '');
+    if (manual) return { url: manual, confidence: 'manual' };
+
+    const normalizedTitle = normalizeQuestionTitle(title);
+    const overrideSlug = LEETCODE_TITLE_SLUG_OVERRIDES[normalizedTitle];
+    if (overrideSlug) {
+        return { url: `https://leetcode.com/problems/${overrideSlug}/`, confidence: 'manual' };
+    }
+
+    const slugMap = await getLeetCodeSlugMap();
+    const slug = slugMap.get(normalizedTitle);
+    if (slug) return { url: `https://leetcode.com/problems/${slug}/`, confidence: 'catalog' };
+
+    const guessedSlug = titleToLeetCodeSlug(title);
+    if (guessedSlug) {
+        return { url: `https://leetcode.com/problems/${guessedSlug}/`, confidence: 'heuristic' };
+    }
+
+    return { url: fallback, confidence: 'fallback' };
+}
+
+function normalizeLeetCodeUrl(link) {
+    if (!link) return '';
+    try {
+        const parsed = new URL(link);
+        if (!/leetcode\.com$/i.test(parsed.hostname)) return parsed.href;
+
+        const descriptionMatch = parsed.pathname.match(/^\/problems\/([^/]+)\/description\/?$/i);
+        if (descriptionMatch) {
+            return `https://leetcode.com/problems/${descriptionMatch[1]}/`;
+        }
+
+        return parsed.href;
+    } catch {
+        return link;
+    }
+}
+
+async function syncAutoQuestionLinks() {
+    const pendingUpdates = [];
+
+    for (const t of tasks) {
+        if (isSubmittedTask(t)) continue;
+
+        const resolved = await resolveBestQuestionLink(t.task_title, t.topic, '');
+        if (!resolved?.url) continue;
+
+        const target = normalizeLeetCodeUrl(resolved.url);
+        const current = normalizeLeetCodeUrl(t.question_link || '');
+
+        // Do not replace an existing direct LeetCode problem URL with a low-confidence guess.
+        if (isLeetCodeProblemUrl(current) && resolved.confidence === 'heuristic') continue;
+
+        // Replace search links with exact links whenever we can produce one.
+        if (isLeetCodeSearchUrl(current) && isLeetCodeProblemUrl(target)) {
+            pendingUpdates.push({ task_id: t.task_id, question_link: target });
+            continue;
+        }
+
+        if (current === target) continue;
+        pendingUpdates.push({ task_id: t.task_id, question_link: target });
+    }
+
+    if (pendingUpdates.length === 0) return;
+
+    for (const item of pendingUpdates) {
+        const { error } = await db
+            .from('tasks')
+            .update({ question_link: item.question_link, updated_at: new Date().toISOString() })
+            .eq('task_id', item.task_id)
+            .eq('user_id', user.id);
+
+        if (!error) {
+            const localTask = tasks.find(t => t.task_id === item.task_id);
+            if (localTask) localTask.question_link = item.question_link;
+        }
+    }
+}
 
 // Clean a header line down to just the meaningful words
 function cleanHeaderText(line) {
@@ -331,6 +534,25 @@ modeManualBtn.onclick = () => {
     previewEl.classList.add('hidden');
     addInput.placeholder = "Paste questions here — one per line";
 };
+
+if (queueMustDoBtn) {
+    queueMustDoBtn.onclick = () => {
+        if (!smartMode) modeSmartBtn.click();
+
+        currentTopic.value = 'Queue';
+        addTopic.value = 'Queue';
+        saveCurrentTopic();
+
+        addInput.value = [
+            'Queue (12 Questions)',
+            ...QUEUE_MUST_DO_QUESTIONS
+        ].join('\n');
+
+        updatePreview();
+        addInput.focus();
+        toast('Queue Must Do list loaded. Click "Add Questions" to save it.', 'success');
+    };
+}
 
 // ─── Live preview for smart mode ───
 function updatePreview() {
@@ -471,7 +693,7 @@ addBtn.onclick = async () => {
             task_title: q.title,
             task_description: '',
             topic: q.topic === 'General' ? currentTopic.value : q.topic,
-            question_link: defaultQuestionLink,
+            question_link: getQuestionLink(q.title, q.topic === 'General' ? currentTopic.value : q.topic, defaultQuestionLink),
             status: 'Pending',
             due_date: null
         }));
@@ -489,15 +711,21 @@ addBtn.onclick = async () => {
             task_title: title,
             task_description: '',
             topic,
-            question_link: defaultQuestionLink,
+            question_link: getQuestionLink(title, topic, defaultQuestionLink),
             status: 'Pending',
             due_date: null
         }));
     }
 
-    // Deduplicate against existing tasks
-    const existingTitles = new Set(tasks.map(t => t.task_title.toLowerCase().trim()));
-    const newRows = rows.filter(r => !existingTitles.has(r.task_title.toLowerCase().trim()));
+    // Deduplicate against existing tasks by topic + title.
+    // This allows the same question title to exist under different topics.
+    const existingTaskKeys = new Set(
+        tasks.map(t => `${(t.topic || 'General').toLowerCase().trim()}::${t.task_title.toLowerCase().trim()}`)
+    );
+    const newRows = rows.filter(r => {
+        const key = `${(r.topic || 'General').toLowerCase().trim()}::${r.task_title.toLowerCase().trim()}`;
+        return !existingTaskKeys.has(key);
+    });
     const skipped = rows.length - newRows.length;
 
     if (newRows.length === 0) {
@@ -516,6 +744,7 @@ addBtn.onclick = async () => {
     if (error) { toast('Failed: ' + error.message, 'error'); return; }
 
     tasks = [...tasks, ...(data || [])];
+    await syncAutoQuestionLinks();
     addInput.value = '';
     if (addLink) addLink.value = '';
     previewEl.classList.add('hidden');
