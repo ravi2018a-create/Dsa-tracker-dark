@@ -268,7 +268,9 @@ let leetCodeCatalogPromise = null;
 
 const LEETCODE_TITLE_SLUG_OVERRIDES = {
     'two sum ii': 'two-sum-ii-input-array-is-sorted',
-    'two sum ii input array is sorted': 'two-sum-ii-input-array-is-sorted'
+    'two sum ii input array is sorted': 'two-sum-ii-input-array-is-sorted',
+    'next greater element': 'next-greater-element-i',
+    'next greater element i': 'next-greater-element-i'
 };
 
 function normalizeQuestionTitle(title) {
