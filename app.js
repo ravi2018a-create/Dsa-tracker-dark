@@ -63,6 +63,14 @@ function restoreFilters() {
     } catch (e) { /* ignore parse errors */ }
 }
 
+function setCurrentTopic(topic) {
+    currentTopic.value = topic;
+    addTopic.value = topic;
+    $$('#topic-chip-group .topic-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.topic === topic);
+    });
+}
+
 function saveCurrentTopic() {
     localStorage.setItem(CURRENT_TOPIC_KEY, currentTopic.value);
     addTopic.value = currentTopic.value;
@@ -70,18 +78,18 @@ function saveCurrentTopic() {
 
 function restoreCurrentTopic() {
     const saved = localStorage.getItem(CURRENT_TOPIC_KEY);
-    if (saved) {
-        currentTopic.value = saved;
-        addTopic.value = saved;
-    }
+    if (saved) setCurrentTopic(saved);
 }
 
-currentTopic.addEventListener('change', () => {
-    saveCurrentTopic();
-    fTopic.value = 'all';
-    fStatus.value = 'Pending';
-    saveFilters();
-    render();
+$$('#topic-chip-group .topic-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+        setCurrentTopic(btn.dataset.topic);
+        saveCurrentTopic();
+        fTopic.value = 'all';
+        fStatus.value = 'Pending';
+        saveFilters();
+        render();
+    });
 });
 
 // ============================================
@@ -512,6 +520,15 @@ function smartParse(text) {
     return result;
 }
 
+// ─── Add-section collapse toggle ───
+const addSectionToggle = $('#add-section-toggle');
+const addSectionBody   = $('#add-section-body');
+addSectionToggle.addEventListener('click', () => {
+    const isOpen = !addSectionBody.classList.contains('hidden');
+    addSectionBody.classList.toggle('hidden', isOpen);
+    addSectionToggle.classList.toggle('open', !isOpen);
+});
+
 // ─── Mode toggle ───
 let smartMode = true;
 const modeSmartBtn  = $('#mode-smart');
@@ -541,8 +558,7 @@ if (queueMustDoBtn) {
     queueMustDoBtn.onclick = () => {
         if (!smartMode) modeSmartBtn.click();
 
-        currentTopic.value = 'Queue';
-        addTopic.value = 'Queue';
+        setCurrentTopic('Queue');
         saveCurrentTopic();
 
         addInput.value = [

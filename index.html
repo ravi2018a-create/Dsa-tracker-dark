@@ -71,31 +71,37 @@
 
         <!-- Add Section -->
         <div class="add-section">
+            <div class="add-section-toggle" id="add-section-toggle">
+                <span>➕ Add Questions</span>
+                <span class="add-toggle-chevron">▼</span>
+            </div>
+            <div class="add-section-body hidden" id="add-section-body">
             <div class="current-topic-bar">
-                <label for="current-topic">📌 Current Topic:</label>
-                <select id="current-topic">
-                    <option value="Arrays">Arrays</option>
-                    <option value="Strings">Strings</option>
-                    <option value="Linked List">Linked List</option>
-                    <option value="Stack">Stack</option>
-                    <option value="Queue">Queue</option>
-                    <option value="Hashing">Hashing</option>
-                    <option value="Tree">Tree</option>
-                    <option value="BST">BST</option>
-                    <option value="Heap">Heap</option>
-                    <option value="Graph">Graph</option>
-                    <option value="Recursion">Recursion</option>
-                    <option value="Backtracking">Backtracking</option>
-                    <option value="Dynamic Programming">Dynamic Programming</option>
-                    <option value="Greedy">Greedy</option>
-                    <option value="Binary Search">Binary Search</option>
-                    <option value="Sliding Window">Sliding Window</option>
-                    <option value="Two Pointers">Two Pointers</option>
-                    <option value="Bit Manipulation">Bit Manipulation</option>
-                    <option value="Math">Math</option>
-                    <option value="Trie">Trie</option>
-                    <option value="Segment Tree">Segment Tree</option>
-                </select>
+                <div class="current-topic-label">📌 Topic:</div>
+                <input type="hidden" id="current-topic" value="Arrays">
+                <div class="topic-chip-group" id="topic-chip-group">
+                    <button type="button" class="topic-chip active" data-topic="Arrays">Arrays</button>
+                    <button type="button" class="topic-chip" data-topic="Strings">Strings</button>
+                    <button type="button" class="topic-chip" data-topic="Linked List">Linked List</button>
+                    <button type="button" class="topic-chip" data-topic="Stack">Stack</button>
+                    <button type="button" class="topic-chip" data-topic="Queue">Queue</button>
+                    <button type="button" class="topic-chip" data-topic="Hashing">Hashing</button>
+                    <button type="button" class="topic-chip" data-topic="Tree">Tree</button>
+                    <button type="button" class="topic-chip" data-topic="BST">BST</button>
+                    <button type="button" class="topic-chip" data-topic="Heap">Heap</button>
+                    <button type="button" class="topic-chip" data-topic="Graph">Graph</button>
+                    <button type="button" class="topic-chip" data-topic="Recursion">Recursion</button>
+                    <button type="button" class="topic-chip" data-topic="Backtracking">Backtracking</button>
+                    <button type="button" class="topic-chip" data-topic="Dynamic Programming">DP</button>
+                    <button type="button" class="topic-chip" data-topic="Greedy">Greedy</button>
+                    <button type="button" class="topic-chip" data-topic="Binary Search">Bin Search</button>
+                    <button type="button" class="topic-chip" data-topic="Sliding Window">Sliding Win</button>
+                    <button type="button" class="topic-chip" data-topic="Two Pointers">Two Ptr</button>
+                    <button type="button" class="topic-chip" data-topic="Bit Manipulation">Bit Manip</button>
+                    <button type="button" class="topic-chip" data-topic="Math">Math</button>
+                    <button type="button" class="topic-chip" data-topic="Trie">Trie</button>
+                    <button type="button" class="topic-chip" data-topic="Segment Tree">Seg Tree</button>
+                </div>
             </div>
             <div class="add-mode-tabs">
                 <button class="mode-tab active" id="mode-smart">🧠 Smart Paste</button>
@@ -148,6 +154,7 @@ Best Time to Buy and Sell Stock"></textarea>
             </div>
 
             <button id="add-btn" class="btn btn-primary btn-add">Add Questions</button>
+            </div><!-- /add-section-body -->
         </div>
 
         <!-- Filters -->
