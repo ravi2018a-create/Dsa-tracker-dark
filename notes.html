@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qualcomm NOTES</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="notes-page">
+    <header class="header">
+        <div class="header-left">
+            <h1>📝 Qualcomm NOTES</h1>
+        </div>
+        <div class="header-right">
+            <a href="index.html" class="btn btn-sm btn-back-link">⬅ Back to DSA Tracker</a>
+        </div>
+    </header>
+
+    <main class="notes-shell">
+        <section class="notes-panel">
+            <h2>Create / Edit Note</h2>
+            <div class="notes-form-status" id="notes-form-status">Creating a new note</div>
+            <form id="notes-form" class="notes-form">
+                <input type="hidden" id="note-id">
+                <label for="note-title">Title</label>
+                <input type="text" id="note-title" placeholder="Example: C pointers quick revision" required>
+
+                <label for="note-content">Notes</label>
+                <div class="notes-editor-wrapper">
+                    <textarea id="note-content" rows="16" placeholder="Write your notes freely. Select any line and use the format popup to add checkboxes or nested headings..." required></textarea>
+                    <div class="notes-format-popup hidden" id="notes-format-popup">
+                        <textarea id="notes-format-input" rows="4" placeholder="Edit selected lines here..." class="notes-format-input"></textarea>
+                        <div class="notes-format-buttons">
+                            <button type="button" class="notes-format-btn" data-format="checkbox" title="Add checkbox to selected line">☑️</button>
+                            <button type="button" class="notes-format-btn" data-format="heading" title="Make selected line a nested heading">📚</button>
+                            <button type="button" class="notes-format-btn" data-format="plain" title="Remove formatting from selected line">📝</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notes-format-hints">
+                    <small>💡 Select any line, edit in the popup above, then click a format button to apply!</small>
+                </div>
+
+                <div class="notes-custom-grid">
+                    <div>
+                        <label for="note-accent">Card Color</label>
+                        <select id="note-accent">
+                            <option value="indigo">Indigo</option>
+                            <option value="emerald">Emerald</option>
+                            <option value="amber">Amber</option>
+                            <option value="rose">Rose</option>
+                        </select>
+                    </div>
+                    <div class="notes-custom-checks">
+                        <label class="notes-checklist-toggle">
+                            <input type="checkbox" id="note-pinned">
+                            Pin this note on top
+                        </label>
+                        <label class="notes-checklist-toggle">
+                            <input type="checkbox" id="note-collapsed-default">
+                            Save as folded
+                        </label>
+                    </div>
+                </div>
+
+                <div class="notes-actions">
+                    <button type="button" class="btn btn-sm" id="cancel-edit-btn">Cancel</button>
+                    <button type="button" class="btn btn-sm" id="clear-form-btn">Reset Form</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="save-note-btn">Save Note</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="notes-panel">
+            <div class="notes-panel-head">
+                <h2>Saved Notes</h2>
+                <div class="notes-summary" id="notes-summary">0 notes</div>
+            </div>
+            <div class="notes-toolbar">
+                <input type="text" id="notes-search" placeholder="Search notes...">
+                <select id="notes-sort">
+                    <option value="recent">Recent First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="title">Title A-Z</option>
+                </select>
+                <button type="button" class="btn btn-sm" id="notes-expand-all">Expand All</button>
+                <button type="button" class="btn btn-sm" id="notes-collapse-all">Collapse All</button>
+            </div>
+            <div id="notes-empty" class="notes-empty hidden">No notes yet. Create your first note.</div>
+            <ul id="notes-list" class="notes-list"></ul>
+        </section>
+    </main>
+
+    <script src="notes.js"></script>
+</body>
+</html>

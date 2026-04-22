@@ -1384,20 +1384,32 @@ function fmtDateShort(d) {
     return `${day}${suffix} ${month}`;
 }
 
-// Get all dates occupied by other topics (not the given topic) — from actual task deadlines
+// Get all dates occupied by other topics (not the given topic).
+// Prefer saved schedule ranges; fall back to task deadlines for unscheduled topics.
 function getOccupiedDates(excludeTopic) {
+    const occupiedByTopic = {};
+    const schedules = getAllSchedules();
+
+    for (const [topic, schedule] of Object.entries(schedules)) {
+        if (topic === excludeTopic) continue;
+        if (!schedule?.startDate || !schedule?.endDate) continue;
+        if (schedule.startDate > schedule.endDate) continue;
+        occupiedByTopic[topic] = { topic, start: schedule.startDate, end: schedule.endDate };
+    }
+
     const topicDates = {};
     tasks.forEach(t => {
-        if (t.topic === excludeTopic || !t.due_date) return;
+        if (t.topic === excludeTopic || !t.due_date || occupiedByTopic[t.topic]) return;
         if (!topicDates[t.topic]) topicDates[t.topic] = [];
         topicDates[t.topic].push(t.due_date);
     });
-    const occupied = [];
+
     for (const [topic, dates] of Object.entries(topicDates)) {
         const sorted = dates.sort();
-        occupied.push({ topic, start: sorted[0], end: sorted[sorted.length - 1] });
+        occupiedByTopic[topic] = { topic, start: sorted[0], end: sorted[sorted.length - 1] };
     }
-    return occupied;
+
+    return Object.values(occupiedByTopic);
 }
 
 function isDateOccupied(dateStr, excludeTopic) {
