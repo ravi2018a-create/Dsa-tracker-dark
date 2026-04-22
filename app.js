@@ -46,15 +46,29 @@ const dashboardToggleBtnEl = $('#dashboard-toggle-btn');
 const dashboardScopeBtns = $$('.dashboard-scope-btn');
 const dashboardSolvedEl = $('#dashboard-solved');
 const dashboardTotalEl = $('#dashboard-total');
-const dashboardAttemptingEl = $('#dashboard-attempting');
+const dashboardLeftEl = $('#dashboard-left');
 const dashboardPercentEl = $('#dashboard-percent');
 const dashboardTopicEl = $('#dashboard-topic');
 const ringProgressEl = $('#ring-progress');
+const ringTrackEl = $('.ring-track');
 
 const DASHBOARD_RING = {
-    visibleArc: 578,
-    totalCircumference: 778
+    radius: 118,
+    visibleRatio: 0.88,
+    startOffset: 112
 };
+
+DASHBOARD_RING.circumference = 2 * Math.PI * DASHBOARD_RING.radius;
+DASHBOARD_RING.visibleArc = DASHBOARD_RING.circumference * DASHBOARD_RING.visibleRatio;
+
+if (ringTrackEl) {
+    setStyleIfChanged(ringTrackEl, 'strokeDasharray', `${DASHBOARD_RING.visibleArc} ${DASHBOARD_RING.circumference}`);
+    setStyleIfChanged(ringTrackEl, 'strokeDashoffset', String(DASHBOARD_RING.startOffset));
+}
+
+if (ringProgressEl) {
+    setStyleIfChanged(ringProgressEl, 'strokeDashoffset', String(DASHBOARD_RING.startOffset));
+}
 
 function setTextIfChanged(el, value) {
     if (!el) return;
@@ -1321,7 +1335,6 @@ function updateStats() {
         if (isOverdue(task.due_date, task.status)) overdue++;
     }
 
-    const attempting = total - solved;
     const pct = total === 0 ? 0 : Math.round((solved / total) * 100);
 
     const dashboardTotal = dashboardTasks.length;
@@ -1329,7 +1342,7 @@ function updateStats() {
     for (const task of dashboardTasks) {
         if (task.status === 'Completed') dashboardSolved++;
     }
-    const dashboardAttempting = dashboardTotal - dashboardSolved;
+    const dashboardLeft = dashboardTotal - dashboardSolved;
     const dashboardPct = dashboardTotal === 0 ? 0 : Math.round((dashboardSolved / dashboardTotal) * 100);
     const dashboardTopicLabel = dashboardScope === 'all' ? 'All Questions' : currentTopic.value;
 
@@ -1342,12 +1355,12 @@ function updateStats() {
 
     setTextIfChanged(dashboardSolvedEl, dashboardSolved);
     setTextIfChanged(dashboardTotalEl, dashboardTotal);
-    setTextIfChanged(dashboardAttemptingEl, dashboardAttempting);
+    setTextIfChanged(dashboardLeftEl, dashboardLeft);
     setTextIfChanged(dashboardPercentEl, dashboardPct + '%');
     setTextIfChanged(dashboardTopicEl, dashboardTopicLabel);
 
     const progressArc = Math.max(0, Math.min(DASHBOARD_RING.visibleArc, (DASHBOARD_RING.visibleArc * dashboardPct) / 100));
-    setStyleIfChanged(ringProgressEl, 'strokeDasharray', `${progressArc} ${DASHBOARD_RING.totalCircumference}`);
+    setStyleIfChanged(ringProgressEl, 'strokeDasharray', `${progressArc} ${DASHBOARD_RING.circumference}`);
 
     // Show/hide delete all button
     if (deleteAllBtnEl) {
