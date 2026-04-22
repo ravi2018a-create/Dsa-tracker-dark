@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSA Tracker Mission Qualcomm</title>
+    <title>DSA Tracker Mission </title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -45,6 +45,7 @@
             </div>
             <div class="header-right">
                 <button id="notify-btn" class="btn btn-sm btn-notify" title="Enable Notifications">🔔 Enable Alerts</button>
+                <button id="dashboard-toggle-btn" class="btn btn-sm btn-dashboard-toggle" title="Show or hide dashboard">📊 Hide Dashboard</button>
                 <a href="notes.html" class="btn btn-sm btn-notes-link" title="Open Qualcomm Notes">📝 Qualcomm NOTES</a>
                 <span id="user-email"></span>
                 <button id="logout-btn" class="btn btn-sm">Logout</button>
@@ -63,6 +64,58 @@
             </div>
             <button id="delete-all-btn" class="btn-delete-all hidden">🗑️ Delete All</button>
         </div>
+
+        <!-- Dashboard -->
+        <section class="dashboard-wrap" aria-label="Progress dashboard">
+            <div class="dashboard-controls">
+                <div class="dashboard-scope" role="tablist" aria-label="Dashboard scope">
+                    <button class="dashboard-scope-btn active" data-dashboard-scope="all" type="button">All Questions</button>
+                    <button class="dashboard-scope-btn" data-dashboard-scope="topic" type="button">Current Topic</button>
+                </div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-ring" id="dashboard-ring">
+                    <svg class="ring-svg" viewBox="0 0 280 280" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="ring-progress-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#2bc4be" />
+                                <stop offset="55%" stop-color="#9edfd9" />
+                                <stop offset="100%" stop-color="#f3ead0" />
+                            </linearGradient>
+                        </defs>
+                        <circle class="ring-track" cx="140" cy="140" r="118"></circle>
+                        <circle class="ring-progress" id="ring-progress" cx="140" cy="140" r="118"></circle>
+                    </svg>
+
+                    <div class="ring-center">
+                        <div class="ring-score">
+                            <span class="ring-solved" id="dashboard-solved">0</span>
+                            <span class="ring-divider">/</span>
+                            <span class="ring-total" id="dashboard-total">0</span>
+                        </div>
+                        <div class="ring-status">✓ Solved</div>
+                    </div>
+
+                    <span class="ring-cap ring-cap-cyan" aria-hidden="true"></span>
+                    <span class="ring-cap ring-cap-red" aria-hidden="true"></span>
+                </div>
+
+                <div class="dashboard-meta">
+                    <div class="dashboard-chip">
+                        <span class="chip-label">Attempting</span>
+                        <strong id="dashboard-attempting">0</strong>
+                    </div>
+                    <div class="dashboard-chip dashboard-chip-topic">
+                        <span class="chip-label">Current Topic</span>
+                        <strong id="dashboard-topic">Arrays</strong>
+                    </div>
+                    <div class="dashboard-chip">
+                        <span class="chip-label">Completion</span>
+                        <strong id="dashboard-percent">0%</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <!-- Current Topic Timeline -->
         <!-- moved inside add-section -->

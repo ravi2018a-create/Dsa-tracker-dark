@@ -32,6 +32,41 @@ const fTopic        = $('#filter-topic');
 const fStatus       = $('#filter-status');
 const sortEl        = $('#sort-by');
 
+// Stats/dashboard DOM cache for fast re-renders
+const statTotalEl = $('#stat-total');
+const statSolvedEl = $('#stat-solved');
+const statUnsolvedEl = $('#stat-unsolved');
+const statOverdueEl = $('#stat-overdue');
+const statPercentEl = $('#stat-percent');
+const progressBarEl = $('#progress-bar');
+const deleteAllBtnEl = $('#delete-all-btn');
+
+const dashboardWrapEl = $('.dashboard-wrap');
+const dashboardToggleBtnEl = $('#dashboard-toggle-btn');
+const dashboardScopeBtns = $$('.dashboard-scope-btn');
+const dashboardSolvedEl = $('#dashboard-solved');
+const dashboardTotalEl = $('#dashboard-total');
+const dashboardAttemptingEl = $('#dashboard-attempting');
+const dashboardPercentEl = $('#dashboard-percent');
+const dashboardTopicEl = $('#dashboard-topic');
+const ringProgressEl = $('#ring-progress');
+
+const DASHBOARD_RING = {
+    visibleArc: 578,
+    totalCircumference: 778
+};
+
+function setTextIfChanged(el, value) {
+    if (!el) return;
+    const next = String(value);
+    if (el.textContent !== next) el.textContent = next;
+}
+
+function setStyleIfChanged(el, prop, value) {
+    if (!el) return;
+    if (el.style[prop] !== value) el.style[prop] = value;
+}
+
 let user = null;
 let tasks = [];
 
@@ -40,6 +75,10 @@ let tasks = [];
 // ============================================
 const FILTER_STORAGE_KEY = 'dsa-tracker-filters';
 const CURRENT_TOPIC_KEY = 'dsa-tracker-current-topic';
+const DASHBOARD_SETTINGS_KEY = 'dsa-tracker-dashboard-settings';
+
+let dashboardScope = 'all';
+let dashboardVisible = true;
 
 function saveFilters() {
     const filters = {
@@ -81,6 +120,53 @@ function restoreCurrentTopic() {
     if (saved) setCurrentTopic(saved);
 }
 
+function saveDashboardSettings() {
+    localStorage.setItem(DASHBOARD_SETTINGS_KEY, JSON.stringify({
+        scope: dashboardScope,
+        visible: dashboardVisible
+    }));
+}
+
+function applyDashboardVisibility() {
+    if (dashboardWrapEl) dashboardWrapEl.classList.toggle('hidden', !dashboardVisible);
+    if (dashboardToggleBtnEl) {
+        dashboardToggleBtnEl.textContent = dashboardVisible ? '📊 Hide Dashboard' : '📊 Show Dashboard';
+        dashboardToggleBtnEl.title = dashboardVisible ? 'Hide dashboard' : 'Show dashboard';
+    }
+}
+
+function setDashboardScope(scope) {
+    dashboardScope = scope === 'topic' ? 'topic' : 'all';
+    dashboardScopeBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.dashboardScope === dashboardScope);
+    });
+    saveDashboardSettings();
+    render();
+}
+
+function restoreDashboardSettings() {
+    const saved = localStorage.getItem(DASHBOARD_SETTINGS_KEY);
+    if (saved) {
+        try {
+            const settings = JSON.parse(saved);
+            dashboardScope = settings.scope === 'topic' ? 'topic' : 'all';
+            dashboardVisible = settings.visible !== false;
+        } catch (e) {
+            dashboardScope = 'all';
+            dashboardVisible = true;
+        }
+    } else {
+        // Default dashboard to all questions as requested.
+        dashboardScope = 'all';
+        dashboardVisible = true;
+    }
+
+    dashboardScopeBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.dashboardScope === dashboardScope);
+    });
+    applyDashboardVisibility();
+}
+
 $$('#topic-chip-group .topic-chip').forEach(btn => {
     btn.addEventListener('click', () => {
         setCurrentTopic(btn.dataset.topic);
@@ -90,6 +176,16 @@ $$('#topic-chip-group .topic-chip').forEach(btn => {
         saveFilters();
         render();
     });
+});
+
+dashboardToggleBtnEl?.addEventListener('click', () => {
+    dashboardVisible = !dashboardVisible;
+    applyDashboardVisibility();
+    saveDashboardSettings();
+});
+
+dashboardScopeBtns.forEach(btn => {
+    btn.addEventListener('click', () => setDashboardScope(btn.dataset.dashboardScope));
 });
 
 // ============================================
@@ -103,6 +199,7 @@ db.auth.onAuthStateChange((event, session) => {
         $('#user-email').textContent = user.email;
         restoreFilters();
         restoreCurrentTopic();
+        restoreDashboardSettings();
         loadAll();
     } else {
         authContainer.classList.remove('hidden');
@@ -1213,22 +1310,50 @@ function render() {
 // ============================================
 function updateStats() {
     const topicTasks = tasks.filter(t => t.topic === currentTopic.value);
+    const dashboardTasks = dashboardScope === 'all' ? tasks : topicTasks;
+
     const total = topicTasks.length;
-    const solved = topicTasks.filter(t => t.status === 'Completed').length;
-    const overdue = topicTasks.filter(t => isOverdue(t.due_date, t.status)).length;
+    let solved = 0;
+    let overdue = 0;
+
+    for (const task of topicTasks) {
+        if (task.status === 'Completed') solved++;
+        if (isOverdue(task.due_date, task.status)) overdue++;
+    }
+
+    const attempting = total - solved;
     const pct = total === 0 ? 0 : Math.round((solved / total) * 100);
 
-    $('#stat-total').textContent = total;
-    $('#stat-solved').textContent = solved;
-    $('#stat-unsolved').textContent = total - solved;
-    $('#stat-overdue').textContent = overdue;
-    $('#stat-percent').textContent = pct + '%';
-    $('#progress-bar').style.width = pct + '%';
+    const dashboardTotal = dashboardTasks.length;
+    let dashboardSolved = 0;
+    for (const task of dashboardTasks) {
+        if (task.status === 'Completed') dashboardSolved++;
+    }
+    const dashboardAttempting = dashboardTotal - dashboardSolved;
+    const dashboardPct = dashboardTotal === 0 ? 0 : Math.round((dashboardSolved / dashboardTotal) * 100);
+    const dashboardTopicLabel = dashboardScope === 'all' ? 'All Questions' : currentTopic.value;
+
+    setTextIfChanged(statTotalEl, total);
+    setTextIfChanged(statSolvedEl, solved);
+    setTextIfChanged(statUnsolvedEl, total - solved);
+    setTextIfChanged(statOverdueEl, overdue);
+    setTextIfChanged(statPercentEl, pct + '%');
+    setStyleIfChanged(progressBarEl, 'width', pct + '%');
+
+    setTextIfChanged(dashboardSolvedEl, dashboardSolved);
+    setTextIfChanged(dashboardTotalEl, dashboardTotal);
+    setTextIfChanged(dashboardAttemptingEl, dashboardAttempting);
+    setTextIfChanged(dashboardPercentEl, dashboardPct + '%');
+    setTextIfChanged(dashboardTopicEl, dashboardTopicLabel);
+
+    const progressArc = Math.max(0, Math.min(DASHBOARD_RING.visibleArc, (DASHBOARD_RING.visibleArc * dashboardPct) / 100));
+    setStyleIfChanged(ringProgressEl, 'strokeDasharray', `${progressArc} ${DASHBOARD_RING.totalCircumference}`);
 
     // Show/hide delete all button
-    const delBtn = $('#delete-all-btn');
-    if (total > 0) delBtn.classList.remove('hidden');
-    else delBtn.classList.add('hidden');
+    if (deleteAllBtnEl) {
+        if (total > 0) deleteAllBtnEl.classList.remove('hidden');
+        else deleteAllBtnEl.classList.add('hidden');
+    }
 
     // Update topic-wise stats
     updateTopicStats();
