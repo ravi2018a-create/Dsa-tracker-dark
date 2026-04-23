@@ -113,6 +113,57 @@
                     </div>
                 </div>
             </div>
+
+            <div class="dashboard-timeline" id="dashboard-timeline">
+                <div class="dashboard-timeline-head">
+                    <h3>Submission Timeline</h3>
+                    <span id="dashboard-timeline-count">0 solved</span>
+                </div>
+                <div class="dashboard-timeline-list" id="dashboard-timeline-list"></div>
+            </div>
+
+            <div class="dashboard-revision" id="dashboard-revision">
+                <div class="dashboard-revision-head">
+                    <h3>Smart Revision Queue</h3>
+                    <span id="dashboard-revision-count">0 due</span>
+                </div>
+                <div class="dashboard-revision-list" id="dashboard-revision-list"></div>
+            </div>
+
+            <div class="dashboard-heatmap" id="dashboard-heatmap">
+                <div class="dashboard-heatmap-head">
+                    <h3>Practice Heatmap</h3>
+                    <span class="heatmap-period-info" id="heatmap-period-info">0 submissions in the past year</span>
+                </div>
+                <div class="heatmap-body">
+                    <div class="heatmap-canvas">
+                        <div class="heatmap-calendar" id="heatmap-calendar"></div>
+                        <div class="heatmap-legend">
+                            <span class="legend-label">Less</span>
+                            <div class="legend-cell" style="background: #1b2a40; border: 1px solid rgba(148, 163, 184, 0.26);"></div>
+                            <div class="legend-cell" style="background: #1f6f43;"></div>
+                            <div class="legend-cell" style="background: #2ea043;"></div>
+                            <div class="legend-cell" style="background: #3fb950;"></div>
+                            <div class="legend-cell" style="background: #56d364;"></div>
+                            <span class="legend-label">More</span>
+                        </div>
+                    </div>
+                    <div class="heatmap-stats heatmap-stats-side">
+                        <div class="heatmap-stat">
+                            <span class="heatmap-stat-label">Total Active Days</span>
+                            <strong id="heatmap-stat-total" class="heatmap-stat-value">0</strong>
+                        </div>
+                        <div class="heatmap-stat">
+                            <span class="heatmap-stat-label">Current Streak</span>
+                            <strong id="heatmap-stat-streak" class="heatmap-stat-value">0</strong>
+                        </div>
+                        <div class="heatmap-stat">
+                            <span class="heatmap-stat-label">Max Streak</span>
+                            <strong id="heatmap-stat-busiest" class="heatmap-stat-value">0</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Current Topic Timeline -->
@@ -349,6 +400,22 @@ Best Time to Buy and Sell Stock"></textarea>
                     <button id="schedule-remove" class="btn btn-sm btn-danger-outline">Remove Schedule</button>
                     <button id="schedule-cancel" class="btn btn-sm">Cancel</button>
                     <button id="schedule-save" class="btn btn-primary btn-sm">📅 Schedule</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Revision Popup Modal -->
+        <div class="edit-overlay hidden" id="revision-popup-overlay">
+            <div class="edit-modal revision-popup-modal">
+                <div class="revision-popup-header">
+                    <h3>📌 Review This Today</h3>
+                    <button class="popup-close-btn" id="revision-popup-close">✕</button>
+                </div>
+                <p class="revision-popup-subtitle" id="revision-popup-subtitle">You have questions to review</p>
+                <div class="revision-popup-list" id="revision-popup-list"></div>
+                <div class="revision-popup-actions">
+                    <button id="revision-popup-snooze" class="btn btn-sm btn-secondary">😴 Snooze Until Tomorrow</button>
+                    <button id="revision-popup-dismiss" class="btn btn-primary btn-sm">Got It!</button>
                 </div>
             </div>
         </div>

@@ -49,6 +49,10 @@ const dashboardTotalEl = $('#dashboard-total');
 const dashboardLeftEl = $('#dashboard-left');
 const dashboardPercentEl = $('#dashboard-percent');
 const dashboardTopicEl = $('#dashboard-topic');
+const dashboardTimelineCountEl = $('#dashboard-timeline-count');
+const dashboardTimelineListEl = $('#dashboard-timeline-list');
+const dashboardRevisionCountEl = $('#dashboard-revision-count');
+const dashboardRevisionListEl = $('#dashboard-revision-list');
 const ringProgressEl = $('#ring-progress');
 const ringTrackEl = $('.ring-track');
 
@@ -81,6 +85,88 @@ function setStyleIfChanged(el, prop, value) {
     if (el.style[prop] !== value) el.style[prop] = value;
 }
 
+function formatSubmissionDate(dateString) {
+    if (!dateString) return 'Unknown date';
+    const d = new Date(dateString);
+    if (Number.isNaN(d.getTime())) return 'Unknown date';
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function isCompletedLate(dueDate, completionTimestamp) {
+    if (!dueDate || !completionTimestamp) return false;
+    const completedDate = completionTimestamp.includes('T') ? completionTimestamp.split('T')[0] : completionTimestamp;
+    return completedDate > dueDate;
+}
+
+function getPlannedDateForTask(task) {
+    if (task.due_date) return task.due_date;
+    const topic = task.topic || 'General';
+    const schedule = getTopicSchedule(topic);
+    return schedule?.endDate || null;
+}
+
+function getTimelineTimingInfo(dueDate, completionTimestamp) {
+    if (!dueDate) return { label: 'No Plan', className: 'no-plan' };
+    const isLate = isCompletedLate(dueDate, completionTimestamp);
+    return isLate
+        ? { label: 'Late', className: 'late' }
+        : { label: 'On Time', className: 'on-time' };
+}
+
+function getSubmissionTimestamp(task) {
+    // Prefer immutable completion timestamp; fall back to local history for legacy rows.
+    return task.completed_at || getCompletionHistoryTimestamp(task.task_id) || task.updated_at || task.created_at || null;
+}
+
+function updateDashboardTimeline(dashboardTasks) {
+    if (!dashboardTimelineListEl || !dashboardTimelineCountEl) return;
+
+    const solved = dashboardTasks
+        .filter(t => t.status === 'Completed')
+        .map(t => ({
+            id: t.task_id,
+            title: t.task_title,
+            topic: t.topic || 'General',
+            dueDate: getPlannedDateForTask(t),
+            timestamp: getSubmissionTimestamp(t)
+        }))
+        .sort((a, b) => {
+            const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return tb - ta;
+        });
+
+    setTextIfChanged(dashboardTimelineCountEl, `${solved.length} solved`);
+
+    if (solved.length === 0) {
+        dashboardTimelineListEl.innerHTML = '<div class="dashboard-timeline-empty">No submissions yet. Solve a question to see it here.</div>';
+        return;
+    }
+
+    const limit = 20;
+    const html = solved.slice(0, limit).map(item => {
+        const timing = getTimelineTimingInfo(item.dueDate, item.timestamp);
+        return `
+        <div class="timeline-row" data-task-id="${item.id}">
+            <div class="timeline-date">${esc(formatSubmissionDate(item.timestamp))}</div>
+            <div class="timeline-question-wrap">
+                <div class="timeline-question timeline-open-code" data-id="${item.id}" title="Open code section for ${esc(item.title)}">${esc(item.title)}</div>
+                <div class="timeline-meta">
+                    <span>Plan: ${esc(formatSubmissionDate(item.dueDate))}</span>
+                    <span>Actual: ${esc(formatSubmissionDate(item.timestamp))}</span>
+                    <span class="timeline-pill ${timing.className}">${timing.label}</span>
+                </div>
+                <div class="timeline-actions">
+                    <button class="timeline-open-btn" data-id="${item.id}" type="button">Open Code Section</button>
+                </div>
+            </div>
+        </div>
+    `;
+    }).join('');
+
+    dashboardTimelineListEl.innerHTML = html;
+}
+
 let user = null;
 let tasks = [];
 
@@ -90,6 +176,462 @@ let tasks = [];
 const FILTER_STORAGE_KEY = 'dsa-tracker-filters';
 const CURRENT_TOPIC_KEY = 'dsa-tracker-current-topic';
 const DASHBOARD_SETTINGS_KEY = 'dsa-tracker-dashboard-settings';
+const COMPLETION_HISTORY_KEY = 'dsa-tracker-completion-history';
+const REVISION_QUEUE_KEY = 'dsa-tracker-revision-queue';
+const POPUP_SNOOZE_KEY = 'dsa-tracker-popup-snooze-date';
+const REVISION_INTERVALS = [1, 3, 7, 14, 30];
+
+let completionHistoryStore = {};
+let revisionQueueStore = {};
+
+function toDateOnlyString(value) {
+    if (!value) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().split('T')[0];
+}
+
+function addDaysToDateString(dateString, days) {
+    const dateOnly = toDateOnlyString(dateString);
+    if (!dateOnly) return null;
+    const d = new Date(dateOnly + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+}
+
+function diffDays(fromDateString, toDateString) {
+    const from = toDateOnlyString(fromDateString);
+    const to = toDateOnlyString(toDateString);
+    if (!from || !to) return 0;
+    const a = new Date(from + 'T00:00:00');
+    const b = new Date(to + 'T00:00:00');
+    return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
+function loadRevisionQueueStore() {
+    const raw = localStorage.getItem(REVISION_QUEUE_KEY);
+    if (!raw) {
+        revisionQueueStore = {};
+        return;
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        revisionQueueStore = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        revisionQueueStore = {};
+    }
+}
+
+function saveRevisionQueueStore() {
+    localStorage.setItem(REVISION_QUEUE_KEY, JSON.stringify(revisionQueueStore));
+}
+
+function getUserRevisionQueue() {
+    if (!user?.id) return {};
+    if (!revisionQueueStore[user.id]) revisionQueueStore[user.id] = {};
+    return revisionQueueStore[user.id];
+}
+
+function getRevisionEntry(taskId) {
+    const queue = getUserRevisionQueue();
+    return queue[String(taskId)] || null;
+}
+
+function setRevisionEntry(taskId, entry) {
+    const queue = getUserRevisionQueue();
+    queue[String(taskId)] = entry;
+    saveRevisionQueueStore();
+}
+
+function removeRevisionEntry(taskId) {
+    const queue = getUserRevisionQueue();
+    if (queue[String(taskId)]) {
+        delete queue[String(taskId)];
+        saveRevisionQueueStore();
+    }
+}
+
+function ensureRevisionSeedForTask(task) {
+    if (task.status !== 'Completed') {
+        removeRevisionEntry(task.task_id);
+        return;
+    }
+
+    const existing = getRevisionEntry(task.task_id);
+    if (existing?.nextReviewDate) return;
+
+    const completedAt = getSubmissionTimestamp(task);
+    const completedDate = toDateOnlyString(completedAt) || getToday();
+    const dueDate = addDaysToDateString(completedDate, REVISION_INTERVALS[0]);
+
+    setRevisionEntry(task.task_id, {
+        intervalIndex: 0,
+        lastReviewedDate: completedDate,
+        nextReviewDate: dueDate
+    });
+}
+
+function updateRevisionQueue(dashboardTasks) {
+    if (!dashboardRevisionListEl || !dashboardRevisionCountEl) return;
+
+    const today = getToday();
+    const completedTasks = dashboardTasks.filter(t => t.status === 'Completed');
+
+    completedTasks.forEach(ensureRevisionSeedForTask);
+
+    const items = completedTasks.map(task => {
+        const entry = getRevisionEntry(task.task_id);
+        if (!entry?.nextReviewDate) return null;
+
+        const daysDelta = diffDays(today, entry.nextReviewDate);
+        return {
+            id: task.task_id,
+            title: task.task_title,
+            topic: task.topic || 'General',
+            nextReviewDate: entry.nextReviewDate,
+            intervalIndex: typeof entry.intervalIndex === 'number' ? entry.intervalIndex : 0,
+            isDue: daysDelta <= 0,
+            daysDelta
+        };
+    }).filter(Boolean);
+
+    const dueItems = items
+        .filter(item => item.isDue)
+        .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+
+    const upcomingItems = items
+        .filter(item => !item.isDue)
+        .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+
+    setTextIfChanged(dashboardRevisionCountEl, `${dueItems.length} due • ${upcomingItems.length} upcoming`);
+
+    const list = [...dueItems.slice(0, 6), ...upcomingItems.slice(0, 4)];
+    if (list.length === 0) {
+        dashboardRevisionListEl.innerHTML = '<div class="dashboard-revision-empty">Solve questions to auto-build your revision queue.</div>';
+        return;
+    }
+
+    dashboardRevisionListEl.innerHTML = list.map(item => {
+        const badgeClass = item.isDue ? 'due' : 'upcoming';
+        const badgeText = item.isDue
+            ? (item.daysDelta < 0 ? `${Math.abs(item.daysDelta)}d overdue` : 'Due today')
+            : `${item.daysDelta}d left`;
+        const stepDays = REVISION_INTERVALS[Math.min(item.intervalIndex, REVISION_INTERVALS.length - 1)];
+
+        return `
+            <div class="revision-row ${item.isDue ? 'due' : ''}">
+                <div class="revision-top">
+                    <div class="revision-title" title="${esc(item.title)}">${esc(item.title)}</div>
+                    <span class="revision-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="revision-meta">
+                    <span>Topic: ${esc(item.topic)}</span>
+                    <span>Review: ${esc(formatSubmissionDate(item.nextReviewDate))}</span>
+                    <span>Step: +${stepDays}d</span>
+                </div>
+                <div class="revision-actions">
+                    <button class="revision-btn revision-btn-lg goto" data-id="${item.id}" data-action="goto">Go to Question</button>
+                    <button class="revision-btn revision-btn-lg code" data-id="${item.id}" data-action="code">Open Code Section</button>
+                </div>
+                <div class="revision-actions revision-actions-secondary">
+                    <button class="revision-btn done" data-id="${item.id}" data-action="done">Done</button>
+                    <button class="revision-btn snooze" data-id="${item.id}" data-action="snooze">+1 Day</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function goToTaskInList(taskId) {
+    const task = tasks.find(t => t.task_id === taskId);
+    if (!task) {
+        toast('Question not found', 'error');
+        return;
+    }
+
+    setCurrentTopic(task.topic || currentTopic.value);
+    saveCurrentTopic();
+    fTopic.value = 'all';
+    fStatus.value = 'all';
+    searchEl.value = '';
+    saveFilters();
+    render();
+
+    requestAnimationFrame(() => {
+        const row = listEl.querySelector(`.q-item[data-task-id="${taskId}"]`);
+        if (!row) {
+            toast('Question is filtered out', 'info');
+            return;
+        }
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('q-focus');
+        setTimeout(() => row.classList.remove('q-focus'), 1800);
+    });
+}
+
+function openCodeSectionForTask(taskId) {
+    const task = tasks.find(t => t.task_id === taskId);
+    if (!task) {
+        toast('Question not found', 'error');
+        return;
+    }
+
+    setCurrentTopic(task.topic || currentTopic.value);
+    saveCurrentTopic();
+    render();
+
+    // If already solved with submitted code, open the read-only code section directly.
+    if (task.status === 'Completed' && task.solution_code) {
+        viewCode(task);
+        return;
+    }
+
+    codeTaskId.value = task.task_id;
+    codeInput.value = task.solution_code || '';
+    if (codeLink) codeLink.value = task.question_link || '';
+    codeOverlay.classList.remove('hidden');
+    codeInput.focus();
+}
+
+async function handleRevisionAction(taskId, action) {
+    const entry = getRevisionEntry(taskId);
+    if (action === 'goto') {
+        goToTaskInList(taskId);
+        return;
+    }
+    if (action === 'code') {
+        openCodeSectionForTask(taskId);
+        return;
+    }
+    if (!entry) return;
+
+    if (action === 'done') {
+        const nextIndex = Math.min((entry.intervalIndex || 0) + 1, REVISION_INTERVALS.length - 1);
+        const today = getToday();
+        setRevisionEntry(taskId, {
+            intervalIndex: nextIndex,
+            lastReviewedDate: today,
+            nextReviewDate: addDaysToDateString(today, REVISION_INTERVALS[nextIndex])
+        });
+        toast('Revision marked done', 'success');
+        updateStats();
+        return;
+    }
+
+    if (action === 'snooze') {
+        const nextDate = addDaysToDateString(entry.nextReviewDate || getToday(), 1);
+        setRevisionEntry(taskId, {
+            intervalIndex: entry.intervalIndex || 0,
+            lastReviewedDate: entry.lastReviewedDate || getToday(),
+            nextReviewDate: nextDate
+        });
+        toast('Revision snoozed by 1 day', 'info');
+        updateStats();
+    }
+}
+
+// ============================================
+//  DAILY REVISION POPUP
+// ============================================
+
+function getCurrentDashboardTasks() {
+    if (dashboardScope === 'topic') {
+        const topic = currentTopic.value;
+        return tasks.filter(t => t.topic === topic);
+    }
+    return tasks; // 'all' scope
+}
+
+function getDueRevisions() {
+    const today = getToday();
+    const dashboardTasks = getCurrentDashboardTasks();
+    const userQueue = getUserRevisionQueue();
+    
+    const dueItems = [];
+    
+    dashboardTasks.forEach(task => {
+        const entry = userQueue[task.task_id];
+        if (!entry) return;
+        
+        const nextReviewDate = entry.nextReviewDate;
+        if (!nextReviewDate) return;
+        
+        const daysUntilDue = diffDays(nextReviewDate, today);
+        
+        if (daysUntilDue > 0) return; // Not yet due
+        
+        dueItems.push({
+            taskId: task.task_id,
+            title: task.task_title,
+            daysOverdue: Math.abs(daysUntilDue),
+            status: daysUntilDue < 0 ? 'overdue' : 'due'
+        });
+    });
+    
+    return dueItems.sort((a, b) => {
+        if (a.status === 'overdue' && b.status !== 'overdue') return -1;
+        if (a.status !== 'overdue' && b.status === 'overdue') return 1;
+        return b.daysOverdue - a.daysOverdue;
+    });
+}
+
+function isPopupSnoozedToday() {
+    const snoozeDate = localStorage.getItem(POPUP_SNOOZE_KEY);
+    if (!snoozeDate) return false;
+    return snoozeDate === getToday();
+}
+
+function snoozePopupUntilTomorrow() {
+    const tomorrow = addDaysToDateString(getToday(), 1);
+    localStorage.setItem(POPUP_SNOOZE_KEY, tomorrow);
+}
+
+function showDueRevisionPopup() {
+    // Don't show if snoozed or not authenticated
+    if (!user?.id || isPopupSnoozedToday()) return;
+    
+    const dueRevisions = getDueRevisions();
+    if (dueRevisions.length === 0) return; // No due revisions to show
+    
+    const overlay = $('#revision-popup-overlay');
+    const listEl = $('#revision-popup-list');
+    const subtitleEl = $('#revision-popup-subtitle');
+    
+    if (!overlay || !listEl || !subtitleEl) {
+        console.warn('Revision popup elements not found in DOM');
+        return;
+    }
+    
+    // Update subtitle
+    const overdue = dueRevisions.filter(r => r.status === 'overdue').length;
+    const due = dueRevisions.filter(r => r.status === 'due').length;
+    let subtitle = `${dueRevisions.length} review${dueRevisions.length !== 1 ? 's' : ''} due`;
+    if (overdue > 0) subtitle += ` (${overdue} overdue)`;
+    subtitleEl.textContent = subtitle;
+    
+    // Render items (max 6)
+    listEl.innerHTML = dueRevisions.slice(0, 6).map(item => `
+        <div class="revision-popup-item">
+            <div class="revision-popup-item-left">
+                <div class="revision-popup-item-title">${esc(item.title)}</div>
+                <span class="revision-popup-item-badge ${item.status}">
+                    ${item.status === 'overdue' ? `${item.daysOverdue}d overdue` : 'due today'}
+                </span>
+            </div>
+            <div class="revision-popup-item-buttons">
+                <button class="revision-popup-btn" onclick="handleRevisionAction(${item.taskId}, 'goto'); hideRevisionPopup();">→ Question</button>
+                <button class="revision-popup-btn" onclick="handleRevisionAction(${item.taskId}, 'code'); hideRevisionPopup();">→ Code</button>
+            </div>
+        </div>
+    `).join('');
+    
+    overlay.classList.remove('hidden');
+}
+
+function hideRevisionPopup() {
+    const overlay = $('#revision-popup-overlay');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+// Debug: Show popup with test data (call from console: testRevisionPopup())
+function testRevisionPopup() {
+    const overlay = $('#revision-popup-overlay');
+    const listEl = $('#revision-popup-list');
+    const subtitleEl = $('#revision-popup-subtitle');
+    
+    subtitleEl.textContent = '2 reviews due (1 overdue)';
+    listEl.innerHTML = `
+        <div class="revision-popup-item">
+            <div class="revision-popup-item-left">
+                <div class="revision-popup-item-title">Two Sum</div>
+                <span class="revision-popup-item-badge overdue">2d overdue</span>
+            </div>
+            <div class="revision-popup-item-buttons">
+                <button class="revision-popup-btn" onclick="toast('Test: Go to question', 'info')">→ Question</button>
+                <button class="revision-popup-btn" onclick="toast('Test: Open code', 'info')">→ Code</button>
+            </div>
+        </div>
+        <div class="revision-popup-item">
+            <div class="revision-popup-item-left">
+                <div class="revision-popup-item-title">Best Time to Buy and Sell Stock</div>
+                <span class="revision-popup-item-badge due">due today</span>
+            </div>
+            <div class="revision-popup-item-buttons">
+                <button class="revision-popup-btn" onclick="toast('Test: Go to question', 'info')">→ Question</button>
+                <button class="revision-popup-btn" onclick="toast('Test: Open code', 'info')">→ Code</button>
+            </div>
+        </div>
+    `;
+    overlay.classList.remove('hidden');
+}
+
+function loadCompletionHistoryStore() {
+    const raw = localStorage.getItem(COMPLETION_HISTORY_KEY);
+    if (!raw) {
+        completionHistoryStore = {};
+        return;
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        completionHistoryStore = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        completionHistoryStore = {};
+    }
+}
+
+function saveCompletionHistoryStore() {
+    localStorage.setItem(COMPLETION_HISTORY_KEY, JSON.stringify(completionHistoryStore));
+}
+
+function getUserCompletionHistory() {
+    if (!user?.id) return {};
+    if (!completionHistoryStore[user.id]) completionHistoryStore[user.id] = {};
+    return completionHistoryStore[user.id];
+}
+
+function normalizeIsoTimestamp(ts) {
+    if (!ts) return null;
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+}
+
+function getCompletionHistoryTimestamp(taskId) {
+    const history = getUserCompletionHistory();
+    return history[String(taskId)] || null;
+}
+
+function setCompletionHistoryTimestamp(taskId, timestamp) {
+    if (!user?.id) return;
+    const normalized = normalizeIsoTimestamp(timestamp);
+    if (!normalized) return;
+    const history = getUserCompletionHistory();
+    history[String(taskId)] = normalized;
+    saveCompletionHistoryStore();
+}
+
+function bootstrapCompletionHistoryFromTasks() {
+    let changed = false;
+    const history = getUserCompletionHistory();
+
+    for (const task of tasks) {
+        if (task.status !== 'Completed') continue;
+        const key = String(task.task_id);
+        const resolved = normalizeIsoTimestamp(task.completed_at || history[key] || task.updated_at || task.created_at);
+        if (!resolved) continue;
+        if (!history[key]) {
+            history[key] = resolved;
+            changed = true;
+        }
+        if (!task.completed_at) task.completed_at = history[key];
+    }
+
+    if (changed) saveCompletionHistoryStore();
+}
+
+loadCompletionHistoryStore();
+loadRevisionQueueStore();
 
 let dashboardScope = 'all';
 let dashboardVisible = true;
@@ -202,6 +744,22 @@ dashboardScopeBtns.forEach(btn => {
     btn.addEventListener('click', () => setDashboardScope(btn.dataset.dashboardScope));
 });
 
+dashboardRevisionListEl?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.revision-btn');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id, 10);
+    if (!id) return;
+    await handleRevisionAction(id, btn.dataset.action);
+});
+
+dashboardTimelineListEl?.addEventListener('click', (e) => {
+    const target = e.target.closest('.timeline-open-code, .timeline-open-btn');
+    if (!target) return;
+    const id = parseInt(target.dataset.id, 10);
+    if (!id) return;
+    openCodeSectionForTask(id);
+});
+
 // ============================================
 //  AUTH STATE LISTENER
 // ============================================
@@ -255,6 +813,18 @@ loginForm.onsubmit = async e => {
 // ─── Log Out ───
 $('#logout-btn').onclick = async () => { await db.auth.signOut(); tasks = []; toast('Logged out', 'info'); };
 
+// ─── Daily Revision Popup ───
+$('#revision-popup-close').onclick = hideRevisionPopup;
+$('#revision-popup-dismiss').onclick = hideRevisionPopup;
+$('#revision-popup-snooze').onclick = () => {
+    snoozePopupUntilTomorrow();
+    hideRevisionPopup();
+    toast('Reminder snoozed until tomorrow', 'info');
+};
+$('#revision-popup-overlay').onclick = e => {
+    if (e.target === $('#revision-popup-overlay')) hideRevisionPopup();
+};
+
 // ============================================
 //  LOAD
 // ============================================
@@ -264,12 +834,15 @@ async function loadAll() {
     loadingEl.classList.add('hidden');
     if (error) { toast('Load failed: ' + error.message, 'error'); return; }
     tasks = data || [];
+    bootstrapCompletionHistoryFromTasks();
     await syncAutoQuestionLinks();
     await clearUnscheduledDeadlines();
     repairCorruptedSchedules();
     render();
     // Check for deadline notifications after loading
     setTimeout(() => checkDeadlinesAndNotify(), 2000);
+    // Show daily revision popup if there are due revisions
+    setTimeout(() => showDueRevisionPopup(), 500);
 }
 
 // Clear due_dates for topics that haven't been explicitly scheduled
@@ -1086,6 +1659,40 @@ async function toggle(id) {
     render();
 }
 
+async function updateTaskAsCompleted(id, payload) {
+    const completionTs = new Date().toISOString();
+    const baseUpdate = {
+        ...payload,
+        status: 'Completed',
+        updated_at: completionTs
+    };
+
+    // Prefer dedicated completed_at if schema has it.
+    let result = await db.from('tasks')
+        .update({ ...baseUpdate, completed_at: completionTs })
+        .eq('task_id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+    // Fallback for legacy schema without completed_at column.
+    if (result.error && /completed_at/i.test(result.error.message || '')) {
+        result = await db.from('tasks')
+            .update(baseUpdate)
+            .eq('task_id', id)
+            .eq('user_id', user.id)
+            .select()
+            .single();
+    }
+
+    if (!result.error) {
+        setCompletionHistoryTimestamp(id, completionTs);
+        if (result.data && !result.data.completed_at) result.data.completed_at = completionTs;
+    }
+
+    return result;
+}
+
 // Code submission modal handlers
 $('#code-cancel').onclick = () => {
     codeOverlay.classList.add('hidden');
@@ -1117,12 +1724,10 @@ $('#code-submit').onclick = async () => {
     }
     
     const id = parseInt(codeTaskId.value);
-    const { data, error } = await db.from('tasks').update({ 
-        status: 'Completed', 
+    const { data, error } = await updateTaskAsCompleted(id, {
         solution_code: code,
-        question_link: normalizedCodeLink.value,
-        updated_at: new Date().toISOString() 
-    }).eq('task_id', id).eq('user_id', user.id).select().single();
+        question_link: normalizedCodeLink.value
+    });
     
     if (error) { toast('Update failed', 'error'); return; }
     
@@ -1266,6 +1871,7 @@ function render() {
 
     list.forEach((t, index) => {
         const li = document.createElement('li');
+        li.dataset.taskId = String(t.task_id);
         const solved = t.status === 'Completed';
         const deadlineStatus = getDeadlineStatus(t);
         const isOverdueItem = deadlineStatus === 'overdue';
@@ -1320,6 +1926,209 @@ function render() {
 }
 
 // ============================================
+//  PRACTICE HEATMAP
+// ============================================
+
+function generateYearHeatmapData() {
+    const today = new Date();
+    const dailyCount = {}; // { "2026-04-24": 3 }
+    
+    const completedTasks = tasks.filter(t => t.status === 'Completed');
+    completedTasks.forEach(task => {
+        const timestamp = getSubmissionTimestamp(task);
+        const dateStr = toDateOnlyString(timestamp) || toDateOnlyString(task.updated_at);
+        
+        if (dateStr) {
+            dailyCount[dateStr] = (dailyCount[dateStr] || 0) + 1;
+        }
+    });
+    
+    return dailyCount;
+}
+
+function calculateHeatmapStats(dailyCount) {
+    const counts = Object.values(dailyCount);
+    const totalSubmissions = counts.reduce((sum, c) => sum + c, 0);
+    const activeDays = counts.filter(c => c > 0).length;
+    
+    // Calculate current streak from today backwards.
+    const today = getToday();
+    let currentStreak = 0;
+    let currentDate = new Date(today);
+    
+    while (true) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        if (!dailyCount[dateStr]) break;
+        
+        currentStreak++;
+        currentDate.setDate(currentDate.getDate() - 1);
+    }
+
+    // Calculate max streak across the year window.
+    const activeDateSet = new Set(
+        Object.entries(dailyCount)
+            .filter(([, value]) => value > 0)
+            .map(([date]) => date)
+    );
+    const sortedActiveDates = Array.from(activeDateSet).sort();
+    let maxStreak = 0;
+    let runningStreak = 0;
+    let previousDate = null;
+
+    sortedActiveDates.forEach(dateStr => {
+        if (!previousDate) {
+            runningStreak = 1;
+        } else {
+            const diff = diffDays(previousDate, dateStr);
+            runningStreak = diff === 1 ? runningStreak + 1 : 1;
+        }
+        if (runningStreak > maxStreak) maxStreak = runningStreak;
+        previousDate = dateStr;
+    });
+    
+    return { totalSubmissions, activeDays, currentStreak, maxStreak };
+}
+
+function getHeatmapLevel(count) {
+    if (count === 0) return 0;
+    if (count <= 2) return 1;
+    if (count <= 4) return 2;
+    if (count <= 6) return 3;
+    return 4;
+}
+
+function getYearCalendar(endDate) {
+    // Get 52 weeks ending at endDate
+    const endDay = new Date(endDate);
+    endDay.setHours(0, 0, 0, 0);
+    
+    // Start from 52 weeks ago (364 days)
+    const startDay = new Date(endDay);
+    startDay.setDate(startDay.getDate() - 363);
+    
+    const weeks = [];
+    let currentWeek = [];
+    let currentDate = new Date(startDay);
+    
+    while (currentDate <= endDay) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        currentWeek.push({ date: dateStr, day: currentDate.getDate() });
+        
+        if (currentWeek.length === 7) {
+            weeks.push([...currentWeek]);
+            currentWeek = [];
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    if (currentWeek.length > 0) {
+        while (currentWeek.length < 7) {
+            currentWeek.push(null);
+        }
+        weeks.push(currentWeek);
+    }
+    
+    return weeks;
+}
+
+function buildMonthGroups(weeks) {
+    const groups = [];
+    let currentGroup = null;
+    let previousKey = '';
+
+    weeks.forEach((week, index) => {
+        const firstDay = week.find(Boolean);
+        if (!firstDay) return;
+
+        const d = new Date(firstDay.date + 'T00:00:00');
+
+        // Skip partial leading month at the very left edge.
+        if (index === 0 && d.getDate() > 7) {
+            return;
+        }
+
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        if (key !== previousKey) {
+            previousKey = key;
+            currentGroup = {
+                label: d.toLocaleDateString('en-US', { month: 'short' }),
+                weeks: []
+            };
+            groups.push(currentGroup);
+        }
+
+        if (currentGroup) {
+            currentGroup.weeks.push(week);
+        }
+    });
+
+    return groups;
+}
+
+function updateHeatmap() {
+    const heatmapEl = $('#dashboard-heatmap');
+    if (!heatmapEl || heatmapEl.classList.contains('hidden')) return;
+    
+    const today = getToday();
+    const dailyCount = generateYearHeatmapData();
+    const weeks = getYearCalendar(today);
+    const stats = calculateHeatmapStats(dailyCount);
+    
+    // Update stats
+    setTextIfChanged($('#heatmap-stat-total'), stats.activeDays);
+    setTextIfChanged($('#heatmap-stat-streak'), stats.currentStreak);
+    setTextIfChanged($('#heatmap-stat-busiest'), stats.maxStreak);
+    
+    const yearLabel = `${stats.totalSubmissions} submissions in the past year`;
+    setTextIfChanged($('#heatmap-period-info'), yearLabel);
+    
+    // Render calendar
+    const calendarEl = $('#heatmap-calendar');
+    const monthGroups = buildMonthGroups(weeks);
+    
+    let html = '<div class="heatmap-grid-shell">';
+    html += '<div class="heatmap-month-groups">';
+
+    monthGroups.forEach(group => {
+        html += '<div class="heatmap-month-group">';
+        html += `<div class="heatmap-month-title">${group.label}</div>`;
+        html += '<div class="heatmap-month-weeks">';
+
+        group.weeks.forEach(week => {
+            html += '<div class="heatmap-week">';
+            week.forEach(cell => {
+                if (!cell) {
+                    html += '<div class="heatmap-cell heatmap-cell-empty"></div>';
+                    return;
+                }
+
+                const count = dailyCount[cell.date] || 0;
+                const level = getHeatmapLevel(count);
+                const isToday = cell.date === today;
+                const tooltip = count > 0 ? `${count} solved` : 'No practice';
+                const dayName = new Date(cell.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                html += `
+                    <div class="heatmap-cell ${isToday ? 'today' : ''}" 
+                         data-level="${level}" 
+                         data-tooltip="${dayName} - ${tooltip}"
+                         title="${dayName}: ${tooltip}">
+                    </div>
+                `;
+            });
+            html += '</div>';
+        });
+        html += '</div>';
+        html += '</div>';
+    });
+
+    html += '</div>';
+
+    calendarEl.innerHTML = html;
+}
+
+// ============================================
 //  STATS
 // ============================================
 function updateStats() {
@@ -1361,6 +2170,10 @@ function updateStats() {
 
     const progressArc = Math.max(0, Math.min(DASHBOARD_RING.visibleArc, (DASHBOARD_RING.visibleArc * dashboardPct) / 100));
     setStyleIfChanged(ringProgressEl, 'strokeDasharray', `${progressArc} ${DASHBOARD_RING.circumference}`);
+
+    updateDashboardTimeline(dashboardTasks);
+    updateRevisionQueue(dashboardTasks);
+    updateHeatmap();
 
     // Show/hide delete all button
     if (deleteAllBtnEl) {

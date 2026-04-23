@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS tasks (
                      CHECK (status IN ('Completed', 'Pending')),
     question_link TEXT DEFAULT '',
     solution_code TEXT DEFAULT '',
+    completed_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -26,6 +27,11 @@ CREATE TABLE IF NOT EXISTS tasks (
 -- If table already exists, add missing columns:
 -- ALTER TABLE tasks ADD COLUMN IF NOT EXISTS question_link TEXT DEFAULT '';
 -- ALTER TABLE tasks ADD COLUMN IF NOT EXISTS solution_code TEXT DEFAULT '';
+-- ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+-- One-time backfill for old completed rows:
+-- UPDATE tasks
+-- SET completed_at = COALESCE(completed_at, updated_at, created_at)
+-- WHERE status = 'Completed';
 
 -- 2. Indexes for fast queries
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
