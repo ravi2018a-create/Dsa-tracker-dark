@@ -52,26 +52,20 @@
             </div>
         </header>
 
-        <!-- Stats Bar -->
-        <div class="stats-bar">
-            <div class="stat">Total: <strong id="stat-total">0</strong></div>
-            <div class="stat">Solved: <strong id="stat-solved">0</strong></div>
-            <div class="stat">Unsolved: <strong id="stat-unsolved">0</strong></div>
-            <div class="stat stat-overdue">Overdue: <strong id="stat-overdue">0</strong></div>
-            <div class="stat progress-stat">
-                <span>Progress: <strong id="stat-percent">0%</strong></span>
-                <div class="progress-track"><div class="progress-fill" id="progress-bar"></div></div>
-            </div>
-            <button id="delete-all-btn" class="btn-delete-all hidden">🗑️ Delete All</button>
-        </div>
-
         <!-- Dashboard -->
         <section class="dashboard-wrap" aria-label="Progress dashboard">
             <div class="dashboard-controls">
-                <div class="dashboard-scope" role="tablist" aria-label="Dashboard scope">
-                    <button class="dashboard-scope-btn active" data-dashboard-scope="all" type="button">All Questions</button>
-                    <button class="dashboard-scope-btn" data-dashboard-scope="topic" type="button">Current Topic</button>
+                <div class="dashboard-controls-left">
+                    <div class="dashboard-scope" role="tablist" aria-label="Dashboard scope">
+                        <button class="dashboard-scope-btn active" data-dashboard-scope="all" type="button">All Questions</button>
+                        <button class="dashboard-scope-btn" data-dashboard-scope="topic" type="button">Current Topic</button>
+                    </div>
+                    <div class="dashboard-topic-quick">
+                        <span class="dashboard-topic-quick-label">Topic</span>
+                        <select id="dashboard-topic-picker" aria-label="Quick current topic picker"></select>
+                    </div>
                 </div>
+                <button id="delete-all-btn" class="btn-delete-all hidden">🗑️ Delete All</button>
             </div>
             <div class="dashboard-card">
                 <div class="dashboard-ring" id="dashboard-ring">
@@ -114,12 +108,31 @@
                 </div>
             </div>
 
-            <div class="dashboard-timeline" id="dashboard-timeline">
-                <div class="dashboard-timeline-head">
-                    <h3>Submission Timeline</h3>
-                    <span id="dashboard-timeline-count">0 solved</span>
+            <div class="dashboard-plan" id="dashboard-plan">
+                <div class="dashboard-plan-head">
+                    <h3>Daily Plan Generator</h3>
+                    <span id="dashboard-plan-count">Target 3 • 0 planned</span>
                 </div>
-                <div class="dashboard-timeline-list" id="dashboard-timeline-list"></div>
+                <div class="dashboard-plan-date" id="dashboard-plan-date">Today</div>
+                <div class="dashboard-plan-progress" id="dashboard-plan-progress">
+                    <div class="dashboard-plan-progress-top">
+                        <span id="dashboard-plan-progress-label">0% done today</span>
+                        <span id="dashboard-plan-progress-meta">0/3</span>
+                    </div>
+                    <div class="dashboard-plan-progress-track">
+                        <div class="dashboard-plan-progress-fill" id="dashboard-plan-progress-fill"></div>
+                    </div>
+                </div>
+                <div class="dashboard-plan-grid">
+                    <div class="plan-column">
+                        <div class="plan-column-title">Must Do Today</div>
+                        <div class="plan-list" id="dashboard-plan-mustdo"></div>
+                    </div>
+                    <div class="plan-column">
+                        <div class="plan-column-title">Stretch Goals</div>
+                        <div class="plan-list" id="dashboard-plan-stretch"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="dashboard-revision" id="dashboard-revision">
@@ -128,6 +141,14 @@
                     <span id="dashboard-revision-count">0 due</span>
                 </div>
                 <div class="dashboard-revision-list" id="dashboard-revision-list"></div>
+            </div>
+
+            <div class="dashboard-timeline" id="dashboard-timeline">
+                <div class="dashboard-timeline-head">
+                    <h3>Submission Timeline</h3>
+                    <span id="dashboard-timeline-count">0 solved</span>
+                </div>
+                <div class="dashboard-timeline-list" id="dashboard-timeline-list"></div>
             </div>
 
             <div class="dashboard-heatmap" id="dashboard-heatmap">
@@ -161,6 +182,39 @@
                             <span class="heatmap-stat-label">Max Streak</span>
                             <strong id="heatmap-stat-busiest" class="heatmap-stat-value">0</strong>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-weekly" id="dashboard-weekly">
+                <div class="dashboard-weekly-head">
+                    <h3>Weekly Review Report</h3>
+                    <span id="dashboard-weekly-range">Last 7 days</span>
+                </div>
+                <div class="weekly-help">Weak topics are ranked by unsolved, overdue, and late completions.</div>
+                <div class="dashboard-weekly-stats" id="dashboard-weekly-stats">
+                    <div class="weekly-stat-chip">
+                        <span class="weekly-label">Solved</span>
+                        <strong id="weekly-solved">0</strong>
+                    </div>
+                    <div class="weekly-stat-chip">
+                        <span class="weekly-label">Revisions</span>
+                        <strong id="weekly-revision">0/0</strong>
+                    </div>
+                    <div class="weekly-stat-chip">
+                        <span class="weekly-label">On-time vs Late</span>
+                        <strong id="weekly-ontime-late">0 / 0</strong>
+                    </div>
+                </div>
+                <div class="dashboard-weekly-focus">
+                    <div class="weekly-focus-block">
+                        <div class="weekly-focus-title">Weak Topics</div>
+                        <div class="weekly-focus-subtitle">Higher score means topic needs more attention.</div>
+                        <div id="weekly-weak-topics" class="weekly-focus-list"></div>
+                    </div>
+                    <div class="weekly-focus-block">
+                        <div class="weekly-focus-title">Next Week Focus</div>
+                        <div id="weekly-next-focus" class="weekly-focus-list"></div>
                     </div>
                 </div>
             </div>
@@ -212,7 +266,7 @@
             </div>
 
             <div class="topic-preset-box">
-                <div class="topic-preset-title">Queue - Must Do (12 Questions)</div>
+                <div class="topic-preset-title">Queue - Core Questions</div>
                 <button id="queue-mustdo-btn" class="btn btn-sm topic-preset-btn">Load Queue Must Do List</button>
             </div>
 

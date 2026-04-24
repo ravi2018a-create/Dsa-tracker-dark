@@ -44,6 +44,7 @@ const deleteAllBtnEl = $('#delete-all-btn');
 const dashboardWrapEl = $('.dashboard-wrap');
 const dashboardToggleBtnEl = $('#dashboard-toggle-btn');
 const dashboardScopeBtns = $$('.dashboard-scope-btn');
+const dashboardTopicPickerEl = $('#dashboard-topic-picker');
 const dashboardSolvedEl = $('#dashboard-solved');
 const dashboardTotalEl = $('#dashboard-total');
 const dashboardLeftEl = $('#dashboard-left');
@@ -53,6 +54,19 @@ const dashboardTimelineCountEl = $('#dashboard-timeline-count');
 const dashboardTimelineListEl = $('#dashboard-timeline-list');
 const dashboardRevisionCountEl = $('#dashboard-revision-count');
 const dashboardRevisionListEl = $('#dashboard-revision-list');
+const dashboardPlanCountEl = $('#dashboard-plan-count');
+const dashboardPlanDateEl = $('#dashboard-plan-date');
+const dashboardPlanMustDoEl = $('#dashboard-plan-mustdo');
+const dashboardPlanStretchEl = $('#dashboard-plan-stretch');
+const dashboardPlanProgressLabelEl = $('#dashboard-plan-progress-label');
+const dashboardPlanProgressMetaEl = $('#dashboard-plan-progress-meta');
+const dashboardPlanProgressFillEl = $('#dashboard-plan-progress-fill');
+const dashboardWeeklyRangeEl = $('#dashboard-weekly-range');
+const weeklySolvedEl = $('#weekly-solved');
+const weeklyRevisionEl = $('#weekly-revision');
+const weeklyOnTimeLateEl = $('#weekly-ontime-late');
+const weeklyWeakTopicsEl = $('#weekly-weak-topics');
+const weeklyNextFocusEl = $('#weekly-next-focus');
 const ringProgressEl = $('#ring-progress');
 const ringTrackEl = $('.ring-track');
 
@@ -114,8 +128,8 @@ function getTimelineTimingInfo(dueDate, completionTimestamp) {
 }
 
 function getSubmissionTimestamp(task) {
-    // Prefer immutable completion timestamp; fall back to local history for legacy rows.
-    return task.completed_at || getCompletionHistoryTimestamp(task.task_id) || task.updated_at || task.created_at || null;
+    // Prefer immutable completion timestamps; avoid mutable updated_at for history display.
+    return task.completed_at || getCompletionHistoryTimestamp(task.task_id) || task.created_at || task.updated_at || null;
 }
 
 function updateDashboardTimeline(dashboardTasks) {
@@ -143,8 +157,7 @@ function updateDashboardTimeline(dashboardTasks) {
         return;
     }
 
-    const limit = 20;
-    const html = solved.slice(0, limit).map(item => {
+    const html = solved.map(item => {
         const timing = getTimelineTimingInfo(item.dueDate, item.timestamp);
         return `
         <div class="timeline-row" data-task-id="${item.id}">
@@ -184,12 +197,19 @@ const REVISION_INTERVALS = [1, 3, 7, 14, 30];
 let completionHistoryStore = {};
 let revisionQueueStore = {};
 
+function formatLocalDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function toDateOnlyString(value) {
     if (!value) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString().split('T')[0];
+    return formatLocalDateKey(d);
 }
 
 function addDaysToDateString(dateString, days) {
@@ -197,7 +217,7 @@ function addDaysToDateString(dateString, days) {
     if (!dateOnly) return null;
     const d = new Date(dateOnly + 'T00:00:00');
     d.setDate(d.getDate() + days);
-    return d.toISOString().split('T')[0];
+    return formatLocalDateKey(d);
 }
 
 function diffDays(fromDateString, toDateString) {
@@ -343,6 +363,244 @@ function updateRevisionQueue(dashboardTasks) {
     }).join('');
 }
 
+function buildPlanRow(item) {
+    const actionLabel = item.action === 'rev-done' ? 'Mark Review Done' : 'Go to Question';
+    return `
+        <div class="plan-row">
+            <div class="plan-top">
+                <div class="plan-title" title="${esc(item.title)}">${esc(item.title)}</div>
+                <span class="plan-badge ${item.badgeClass}">${esc(item.badgeText)}</span>
+            </div>
+            <div class="plan-meta">${esc(item.meta)}</div>
+            <button class="plan-btn" data-id="${item.id}" data-action="${item.action}">${actionLabel}</button>
+        </div>
+    `;
+}
+
+function getDailySolveTarget(dateString = getToday()) {
+    const d = new Date(dateString + 'T00:00:00');
+    const day = d.getDay();
+    return day === 0 || day === 6 ? 6 : 3;
+}
+
+function updateDailyPlan(dashboardTasks) {
+    if (!dashboardPlanCountEl || !dashboardPlanDateEl || !dashboardPlanMustDoEl || !dashboardPlanStretchEl) return;
+
+    const today = getToday();
+    const dailyTarget = getDailySolveTarget(today);
+    const dateLabel = new Date(today + 'T00:00:00').toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric'
+    });
+    setTextIfChanged(dashboardPlanDateEl, `Today • ${dateLabel} • Working Mode target: ${dailyTarget}`);
+
+    const pending = dashboardTasks.filter(t => t.status !== 'Completed');
+    const completed = dashboardTasks.filter(t => t.status === 'Completed');
+
+    completed.forEach(ensureRevisionSeedForTask);
+
+    const overduePending = pending
+        .filter(t => t.due_date && t.due_date < today)
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+    const dueTodayPending = pending
+        .filter(t => t.due_date === today)
+        .sort((a, b) => a.task_title.localeCompare(b.task_title));
+
+    const dueRevisions = completed
+        .map(task => {
+            const entry = getRevisionEntry(task.task_id);
+            if (!entry?.nextReviewDate) return null;
+            const daysDelta = diffDays(today, entry.nextReviewDate);
+            if (daysDelta > 0) return null;
+            return {
+                task,
+                nextReviewDate: entry.nextReviewDate,
+                daysDelta
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+
+    const mustDo = [
+        ...overduePending.map(task => ({
+            id: task.task_id,
+            title: task.task_title,
+            badgeClass: 'overdue',
+            badgeText: 'Overdue',
+            meta: `${task.topic || 'General'} • Due ${formatSubmissionDate(task.due_date)}`,
+            action: 'goto'
+        })),
+        ...dueRevisions.map(item => ({
+            id: item.task.task_id,
+            title: item.task.task_title,
+            badgeClass: 'revision',
+            badgeText: item.daysDelta < 0 ? `${Math.abs(item.daysDelta)}d overdue` : 'Review today',
+            meta: `${item.task.topic || 'General'} • Revision ${formatSubmissionDate(item.nextReviewDate)}`,
+            action: 'rev-done'
+        })),
+        ...dueTodayPending.map(task => ({
+            id: task.task_id,
+            title: task.task_title,
+            badgeClass: 'today',
+            badgeText: 'Due today',
+            meta: `${task.topic || 'General'} • Planned ${formatSubmissionDate(task.due_date)}`,
+            action: 'goto'
+        }))
+    ].slice(0, dailyTarget);
+
+    const usedMustDoIds = new Set(mustDo.map(item => item.id));
+
+    const stretchSource = pending
+        .filter(t => !usedMustDoIds.has(t.task_id))
+        .sort((a, b) => {
+            const ad = a.due_date || '9999-12-31';
+            const bd = b.due_date || '9999-12-31';
+            return ad.localeCompare(bd);
+        })
+        .slice(0, dailyTarget);
+
+    const stretch = stretchSource.map(task => ({
+        id: task.task_id,
+        title: task.task_title,
+        badgeClass: 'pending',
+        badgeText: task.due_date ? 'Upcoming' : 'No deadline',
+        meta: `${task.topic || 'General'} • ${task.due_date ? `Due ${formatSubmissionDate(task.due_date)}` : 'Pick this next'}`,
+        action: 'goto'
+    }));
+
+    const planTotal = mustDo.length + stretch.length;
+    setTextIfChanged(dashboardPlanCountEl, `Target ${dailyTarget} • ${planTotal} planned`);
+
+    const solvedToday = completed.filter(task => toDateOnlyString(getSubmissionTimestamp(task)) === today).length;
+    const revisionsDoneToday = completed.filter(task => {
+        const entry = getRevisionEntry(task.task_id);
+        return Boolean(entry && entry.lastReviewedDate === today && (entry.intervalIndex || 0) > 0);
+    }).length;
+    const completionPct = dailyTarget > 0 ? Math.min(100, Math.round((solvedToday / dailyTarget) * 100)) : 0;
+
+    setTextIfChanged(dashboardPlanProgressLabelEl, `${completionPct}% questions target done today`);
+    setTextIfChanged(dashboardPlanProgressMetaEl, `${solvedToday}/${dailyTarget} • revisions ${revisionsDoneToday}`);
+    setStyleIfChanged(dashboardPlanProgressFillEl, 'width', `${completionPct}%`);
+
+    dashboardPlanMustDoEl.innerHTML = mustDo.length
+        ? mustDo.map(buildPlanRow).join('')
+        : '<div class="plan-empty">No urgent tasks. Great pace today.</div>';
+
+    dashboardPlanStretchEl.innerHTML = stretch.length
+        ? stretch.map(buildPlanRow).join('')
+        : '<div class="plan-empty">You are all caught up. Solve one challenge to stay warm.</div>';
+}
+
+function updateWeeklyReview(dashboardTasks) {
+    if (!weeklySolvedEl || !weeklyRevisionEl || !weeklyOnTimeLateEl || !weeklyWeakTopicsEl || !weeklyNextFocusEl || !dashboardWeeklyRangeEl) return;
+
+    const today = getToday();
+    const weekStart = addDaysToDateString(today, -6);
+    const rangeText = `${formatSubmissionDate(weekStart)} - ${formatSubmissionDate(today)}`;
+    setTextIfChanged(dashboardWeeklyRangeEl, rangeText);
+
+    const completedInScope = dashboardTasks.filter(t => t.status === 'Completed');
+    const solvedThisWeek = completedInScope.filter(task => {
+        const date = toDateOnlyString(getSubmissionTimestamp(task));
+        return date && date >= weekStart && date <= today;
+    });
+
+    const solvedCount = solvedThisWeek.length;
+    setTextIfChanged(weeklySolvedEl, solvedCount);
+
+    const revisionsInScope = completedInScope.map(task => ({
+        task,
+        entry: getRevisionEntry(task.task_id)
+    })).filter(item => item.entry?.nextReviewDate);
+
+    const dueRevisionsThisWeek = revisionsInScope.filter(item => {
+        const d = item.entry.nextReviewDate;
+        return d >= weekStart && d <= today;
+    }).length;
+
+    const doneRevisionsThisWeek = revisionsInScope.filter(item => {
+        const lr = item.entry.lastReviewedDate;
+        const idx = item.entry.intervalIndex || 0;
+        return idx > 0 && lr && lr >= weekStart && lr <= today;
+    }).length;
+
+    setTextIfChanged(weeklyRevisionEl, `Done ${doneRevisionsThisWeek} / Due ${dueRevisionsThisWeek}`);
+
+    let onTime = 0;
+    let late = 0;
+    solvedThisWeek.forEach(task => {
+        const dueDate = getPlannedDateForTask(task);
+        const actual = getSubmissionTimestamp(task);
+        if (!dueDate || !actual) return;
+        if (isCompletedLate(dueDate, actual)) late++;
+        else onTime++;
+    });
+    setTextIfChanged(weeklyOnTimeLateEl, `On-time ${onTime} / Late ${late}`);
+
+    const topicScore = {};
+    const upsertTopic = topic => {
+        const key = topic || 'General';
+        if (!topicScore[key]) topicScore[key] = { score: 0, overdue: 0, unsolved: 0, late: 0 };
+        return topicScore[key];
+    };
+
+    dashboardTasks.forEach(task => {
+        const bucket = upsertTopic(task.topic);
+        if (task.status !== 'Completed') {
+            bucket.unsolved += 1;
+            bucket.score += 1;
+            if (task.due_date && task.due_date < today) {
+                bucket.overdue += 1;
+                bucket.score += 2;
+            }
+            return;
+        }
+
+        const submitted = toDateOnlyString(getSubmissionTimestamp(task));
+        if (!submitted || submitted < weekStart || submitted > today) return;
+        const dueDate = getPlannedDateForTask(task);
+        if (dueDate && isCompletedLate(dueDate, submitted)) {
+            bucket.late += 1;
+            bucket.score += 2;
+        }
+    });
+
+    const weakTopics = Object.entries(topicScore)
+        .filter(([, v]) => v.score > 0)
+        .sort((a, b) => b[1].score - a[1].score)
+        .slice(0, 3);
+
+    weeklyWeakTopicsEl.innerHTML = weakTopics.length
+        ? weakTopics.map(([topic, v]) => `
+            <div class="weekly-focus-item">
+                <span>${esc(topic)}</span>
+                <span class="weekly-focus-item-meta">Score ${v.score} • Overdue ${v.overdue} • Unsolved ${v.unsolved} • Late ${v.late}</span>
+            </div>
+        `).join('')
+        : '<div class="weekly-focus-empty">No major weak topics detected this week.</div>';
+
+    const focusItems = weakTopics.length
+        ? weakTopics.map(([topic]) => topic)
+        : ['Continue current pace', 'Keep daily revisions', 'Maintain streak discipline'];
+
+    weeklyNextFocusEl.innerHTML = focusItems.map((item, idx) => `
+        <div class="weekly-focus-item">
+            <span>${idx + 1}. ${esc(item)}</span>
+            <span></span>
+        </div>
+    `).join('');
+}
+
+async function handleDailyPlanAction(taskId, action) {
+    if (action === 'rev-done') {
+        await handleRevisionAction(taskId, 'done');
+        return;
+    }
+    goToTaskInList(taskId);
+}
+
 function goToTaskInList(taskId) {
     const task = tasks.find(t => t.task_id === taskId);
     if (!task) {
@@ -457,15 +715,15 @@ function getDueRevisions() {
         const nextReviewDate = entry.nextReviewDate;
         if (!nextReviewDate) return;
         
-        const daysUntilDue = diffDays(nextReviewDate, today);
+        const daysDelta = diffDays(today, nextReviewDate);
         
-        if (daysUntilDue > 0) return; // Not yet due
+        if (daysDelta > 0) return; // Not yet due
         
         dueItems.push({
             taskId: task.task_id,
             title: task.task_title,
-            daysOverdue: Math.abs(daysUntilDue),
-            status: daysUntilDue < 0 ? 'overdue' : 'due'
+            daysOverdue: Math.abs(daysDelta),
+            status: daysDelta < 0 ? 'overdue' : 'due'
         });
     });
     
@@ -492,7 +750,10 @@ function showDueRevisionPopup() {
     if (!user?.id || isPopupSnoozedToday()) return;
     
     const dueRevisions = getDueRevisions();
-    if (dueRevisions.length === 0) return; // No due revisions to show
+    if (dueRevisions.length === 0) {
+        hideRevisionPopup();
+        return; // No due revisions to show
+    }
     
     const overlay = $('#revision-popup-overlay');
     const listEl = $('#revision-popup-list');
@@ -522,6 +783,7 @@ function showDueRevisionPopup() {
             <div class="revision-popup-item-buttons">
                 <button class="revision-popup-btn" onclick="handleRevisionAction(${item.taskId}, 'goto'); hideRevisionPopup();">→ Question</button>
                 <button class="revision-popup-btn" onclick="handleRevisionAction(${item.taskId}, 'code'); hideRevisionPopup();">→ Code</button>
+                <button class="revision-popup-btn" onclick="markRevisionDoneFromPopup(${item.taskId});">✓ Done</button>
             </div>
         </div>
     `).join('');
@@ -532,6 +794,11 @@ function showDueRevisionPopup() {
 function hideRevisionPopup() {
     const overlay = $('#revision-popup-overlay');
     if (overlay) overlay.classList.add('hidden');
+}
+
+async function markRevisionDoneFromPopup(taskId) {
+    await handleRevisionAction(taskId, 'done');
+    showDueRevisionPopup();
 }
 
 // Debug: Show popup with test data (call from console: testRevisionPopup())
@@ -618,7 +885,7 @@ function bootstrapCompletionHistoryFromTasks() {
     for (const task of tasks) {
         if (task.status !== 'Completed') continue;
         const key = String(task.task_id);
-        const resolved = normalizeIsoTimestamp(task.completed_at || history[key] || task.updated_at || task.created_at);
+        const resolved = normalizeIsoTimestamp(task.completed_at || history[key] || task.created_at || task.updated_at);
         if (!resolved) continue;
         if (!history[key]) {
             history[key] = resolved;
@@ -661,9 +928,84 @@ function restoreFilters() {
 function setCurrentTopic(topic) {
     currentTopic.value = topic;
     addTopic.value = topic;
+    if (dashboardTopicPickerEl) dashboardTopicPickerEl.value = topic;
     $$('#topic-chip-group .topic-chip').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.topic === topic);
     });
+}
+
+function initDashboardTopicPicker() {
+    if (!dashboardTopicPickerEl || !addTopic) return;
+
+    const selected = currentTopic.value || addTopic.value || 'Arrays';
+    const baseTopics = Array.from(addTopic.options).map(opt => opt.value).filter(Boolean);
+    const taskTopics = tasks.map(t => t.topic || 'General');
+    const allTopics = Array.from(new Set([...baseTopics, ...taskTopics]));
+
+    const topicProgress = {};
+    tasks.forEach(task => {
+        const topic = task.topic || 'General';
+        if (!topicProgress[topic]) topicProgress[topic] = { total: 0, solved: 0 };
+        topicProgress[topic].total += 1;
+        if (task.status === 'Completed') topicProgress[topic].solved += 1;
+    });
+
+    const topicsWithTasks = allTopics.filter(topic => (topicProgress[topic]?.total || 0) > 0);
+
+    const sortWithTasks = (a, b) => {
+        const pa = topicProgress[a] || { total: 0, solved: 0 };
+        const pb = topicProgress[b] || { total: 0, solved: 0 };
+
+        if (a === selected) return -1;
+        if (b === selected) return 1;
+
+        const aDone = pa.solved === pa.total;
+        const bDone = pb.solved === pb.total;
+
+        if (aDone !== bDone) return aDone ? 1 : -1;
+
+        if (!aDone && pa.solved !== pb.solved) {
+            return pb.solved - pa.solved;
+        }
+
+        if (aDone && pa.total !== pb.total) {
+            return pb.total - pa.total;
+        }
+
+        return a.localeCompare(b);
+    };
+
+    topicsWithTasks.sort(sortWithTasks);
+
+    const orderedTopics = topicsWithTasks;
+
+    if (orderedTopics.length === 0) {
+        dashboardTopicPickerEl.innerHTML = '<option value="">No topics with questions</option>';
+        dashboardTopicPickerEl.disabled = true;
+        return;
+    }
+
+    dashboardTopicPickerEl.disabled = false;
+
+    dashboardTopicPickerEl.innerHTML = orderedTopics.map(topic => {
+        const p = topicProgress[topic] || { total: 0, solved: 0 };
+        const isDone = p.total > 0 && p.solved === p.total;
+        let label = topic;
+
+        if (isDone) {
+            label = `${label} ✓`;
+        }
+
+        return `<option value="${esc(topic)}">${esc(label)}</option>`;
+    }).join('');
+
+    const nextTopic = orderedTopics.includes(selected) ? selected : orderedTopics[0];
+    dashboardTopicPickerEl.value = nextTopic;
+
+    if (currentTopic.value !== nextTopic) {
+        setCurrentTopic(nextTopic);
+        saveCurrentTopic();
+    }
 }
 
 function saveCurrentTopic() {
@@ -674,6 +1016,7 @@ function saveCurrentTopic() {
 function restoreCurrentTopic() {
     const saved = localStorage.getItem(CURRENT_TOPIC_KEY);
     if (saved) setCurrentTopic(saved);
+    initDashboardTopicPicker();
 }
 
 function saveDashboardSettings() {
@@ -744,12 +1087,34 @@ dashboardScopeBtns.forEach(btn => {
     btn.addEventListener('click', () => setDashboardScope(btn.dataset.dashboardScope));
 });
 
+dashboardTopicPickerEl?.addEventListener('change', () => {
+    setCurrentTopic(dashboardTopicPickerEl.value);
+    saveCurrentTopic();
+    render();
+});
+
 dashboardRevisionListEl?.addEventListener('click', async (e) => {
     const btn = e.target.closest('.revision-btn');
     if (!btn) return;
     const id = parseInt(btn.dataset.id, 10);
     if (!id) return;
     await handleRevisionAction(id, btn.dataset.action);
+});
+
+dashboardPlanMustDoEl?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.plan-btn');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id, 10);
+    if (!id) return;
+    await handleDailyPlanAction(id, btn.dataset.action);
+});
+
+dashboardPlanStretchEl?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.plan-btn');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id, 10);
+    if (!id) return;
+    await handleDailyPlanAction(id, btn.dataset.action);
 });
 
 dashboardTimelineListEl?.addEventListener('click', (e) => {
@@ -1404,7 +1769,7 @@ if (queueMustDoBtn) {
         saveCurrentTopic();
 
         addInput.value = [
-            'Queue (12 Questions)',
+            'Queue (Core Questions)',
             ...QUEUE_MUST_DO_QUESTIONS
         ].join('\n');
 
@@ -1457,7 +1822,7 @@ addInput.addEventListener('input', updatePreview);
 //  DEADLINE HELPERS
 // ============================================
 function getToday() {
-    return new Date().toISOString().split('T')[0];
+    return formatLocalDateKey(new Date());
 }
 
 function isOverdue(dueDate, status) {
@@ -1525,7 +1890,7 @@ function getDaySuffix(day) {
 function getDeadlineInDays(n) {
     const d = new Date();
     d.setDate(d.getDate() + n);
-    return d.toISOString().split('T')[0]; // YYYY-MM-DD
+    return formatLocalDateKey(d); // YYYY-MM-DD
 }
 
 function normalizeQuestionLink(rawLink) {
@@ -1957,7 +2322,7 @@ function calculateHeatmapStats(dailyCount) {
     let currentDate = new Date(today);
     
     while (true) {
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateStr = formatLocalDateKey(currentDate);
         if (!dailyCount[dateStr]) break;
         
         currentStreak++;
@@ -2011,7 +2376,7 @@ function getYearCalendar(endDate) {
     let currentDate = new Date(startDay);
     
     while (currentDate <= endDay) {
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateStr = formatLocalDateKey(currentDate);
         currentWeek.push({ date: dateStr, day: currentDate.getDate() });
         
         if (currentWeek.length === 7) {
@@ -2090,12 +2455,12 @@ function updateHeatmap() {
     let html = '<div class="heatmap-grid-shell">';
     html += '<div class="heatmap-month-groups">';
 
-    monthGroups.forEach(group => {
+    monthGroups.forEach((group, groupIndex) => {
         html += '<div class="heatmap-month-group">';
         html += `<div class="heatmap-month-title">${group.label}</div>`;
         html += '<div class="heatmap-month-weeks">';
 
-        group.weeks.forEach(week => {
+        group.weeks.forEach((week, weekIndex) => {
             html += '<div class="heatmap-week">';
             week.forEach(cell => {
                 if (!cell) {
@@ -2108,9 +2473,11 @@ function updateHeatmap() {
                 const isToday = cell.date === today;
                 const tooltip = count > 0 ? `${count} solved` : 'No practice';
                 const dayName = new Date(cell.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const isRightEdgeWeek = groupIndex === monthGroups.length - 1 && weekIndex === group.weeks.length - 1;
+                const tooltipClass = isRightEdgeWeek ? 'tooltip-flip-left' : '';
 
                 html += `
-                    <div class="heatmap-cell ${isToday ? 'today' : ''}" 
+                    <div class="heatmap-cell ${isToday ? 'today' : ''} ${tooltipClass}" 
                          data-level="${level}" 
                          data-tooltip="${dayName} - ${tooltip}"
                          title="${dayName}: ${tooltip}">
@@ -2132,6 +2499,8 @@ function updateHeatmap() {
 //  STATS
 // ============================================
 function updateStats() {
+    initDashboardTopicPicker();
+
     const topicTasks = tasks.filter(t => t.topic === currentTopic.value);
     const dashboardTasks = dashboardScope === 'all' ? tasks : topicTasks;
 
@@ -2173,6 +2542,8 @@ function updateStats() {
 
     updateDashboardTimeline(dashboardTasks);
     updateRevisionQueue(dashboardTasks);
+    updateDailyPlan(dashboardTasks);
+    updateWeeklyReview(dashboardTasks);
     updateHeatmap();
 
     // Show/hide delete all button
