@@ -320,23 +320,17 @@ function updateRevisionQueue(dashboardTasks) {
         .filter(item => item.isDue)
         .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
 
-    const upcomingItems = items
-        .filter(item => !item.isDue)
-        .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+    setTextIfChanged(dashboardRevisionCountEl, `${dueItems.length} due`);
 
-    setTextIfChanged(dashboardRevisionCountEl, `${dueItems.length} due • ${upcomingItems.length} upcoming`);
-
-    const list = [...dueItems.slice(0, 6), ...upcomingItems.slice(0, 4)];
+    const list = dueItems.slice(0, 8);
     if (list.length === 0) {
-        dashboardRevisionListEl.innerHTML = '<div class="dashboard-revision-empty">Solve questions to auto-build your revision queue.</div>';
+        dashboardRevisionListEl.innerHTML = '<div class="dashboard-revision-empty">No reviews due right now. Upcoming reviews will appear automatically.</div>';
         return;
     }
 
     dashboardRevisionListEl.innerHTML = list.map(item => {
-        const badgeClass = item.isDue ? 'due' : 'upcoming';
-        const badgeText = item.isDue
-            ? (item.daysDelta < 0 ? `${Math.abs(item.daysDelta)}d overdue` : 'Due today')
-            : `${item.daysDelta}d left`;
+        const badgeClass = 'due';
+        const badgeText = item.daysDelta < 0 ? `${Math.abs(item.daysDelta)}d overdue` : 'Due today';
         const stepDays = REVISION_INTERVALS[Math.min(item.intervalIndex, REVISION_INTERVALS.length - 1)];
 
         return `
